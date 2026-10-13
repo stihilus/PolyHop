@@ -1,5 +1,6 @@
 // The right-hand panel of the player: start of the level, look, attachments, movement, sounds.
 
+import { skinForBuild } from '../../core/humanoid';
 import { attachmentAnchor } from '../../core/rig';
 import { newId } from '../../core/types';
 import { el } from '../ui/dom';
@@ -120,6 +121,10 @@ export function buildPlayerInspector(host: PanelHost): void {
   const { store } = host;
   const player = store.project.player as unknown as Record<string, unknown>;
   const changed = (key: string) => {
+    // the other build of the built-in character: its skin goes along with it
+    if (key === 'modelId' && typeof player.modelId === 'string') {
+      player.skin = skinForBuild((player.skin as string | null) ?? null, player.modelId);
+    }
     store.playerChanged();
     // the bones offered for attachments depend on the model
     if (key === 'modelId') host.refreshInspector();
@@ -127,7 +132,7 @@ export function buildPlayerInspector(host: PanelHost): void {
   host.inspector.append(
     el('div', { class: 'section-title', text: 'Player' }),
     buildForm(SPAWN_FIELDS, store.level as unknown as Record<string, unknown>, () => store.playerChanged()),
-    buildForm(playerLookFields(store.project.models, host.textures.names()), player, changed),
+    buildForm(playerLookFields(store.project.models, host.textures.names(), store.project.player.modelId), player, changed),
     buildAttachmentsEditor(host),
     buildForm(playerFields(store.project.sounds.map((x) => ({ id: x.id, name: x.name }))), player, () => store.playerChanged()),
   );

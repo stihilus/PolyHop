@@ -1,4 +1,5 @@
 import { type Variable, type VariableStore, hudText } from '../core/logic';
+import { UI_FONT_STACK } from '../core/fonts';
 
 /**
  * The on-screen display of a running game: the variables marked "show on screen" (top right) and short
@@ -27,7 +28,7 @@ export class Hud {
       inset: '0',
       pointerEvents: 'none',
       zIndex: '20',
-      fontFamily: '"Departure Mono", ui-monospace, monospace',
+      fontFamily: UI_FONT_STACK,
       display: 'none',
     });
     this.list = document.createElement('div');

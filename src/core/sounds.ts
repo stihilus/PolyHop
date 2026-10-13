@@ -64,7 +64,7 @@ export function builtInSound(id: string): SoundAsset | null {
     case SOUND_IDS.powerup:
       return sfx(id, 'Power-up', 'powerup', 1);
     case SOUND_IDS.checkpoint:
-      return sfx(id, 'Checkpoint', 'blip', 7, 0.7, { changeAmount: 0.4, changeSpeed: 0.5 });
+      return sfx(id, 'Checkpoint', 'blip', 7, 0.6, { startFreq: 0.42, changeAmount: 0.45, changeSpeed: 0.55, sustain: 0.1, decay: 0.28, punch: 0.15 });
     case SOUND_IDS.jump:
       return sfx(id, 'Jump', 'jump', 2, 0.55);
     case SOUND_IDS.jump2:

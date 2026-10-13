@@ -1,9 +1,14 @@
 // Which properties the inspector shows for the player and for blocks.
 
+import { HUMANOID_SKINS } from '../../core/humanoid';
 import type { Field } from '../ui/form';
 
 /** The look of the player: model and skin. Attachments follow (see playerPanel.ts). */
-export function playerLookFields(models: { id: string; name: string }[], textures: string[]): Field[] {
+export function playerLookFields(models: { id: string; name: string }[], textures: string[], modelId: string | null = null): Field[] {
+  // the skins made for the chosen character come first
+  const own = modelId ? (HUMANOID_SKINS[modelId] ?? []) : [];
+  const ordered = [...own.filter((n) => textures.includes(n)), ...textures.filter((n) => !own.includes(n))];
+  const template = own[own.length - 1] ?? 'the template of the character';
   return [
     { kind: 'section', label: 'Look' },
     {
@@ -21,8 +26,8 @@ export function playerLookFields(models: { id: string; name: string }[], texture
       label: 'Skin',
       nullable: true,
       noneLabel: 'Model default',
-      options: textures.map((t) => ({ value: t, label: t })),
-      hint: 'A texture drawn on the model instead of its own. It must use the same layout (see Character-Template.png).',
+      options: ordered.map((t) => ({ value: t, label: t.replace(/\.png$/i, '') })),
+      hint: `A texture drawn on the model instead of its own. It must use the same layout as the model (see ${template}).`,
     },
     { kind: 'color', key: 'color', label: 'Cube color', hint: 'Only used by the placeholder cube' },
   ];

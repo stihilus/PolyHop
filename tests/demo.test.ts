@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { RUIN_ROUTE, createBlankProject, createDemoProject, type RuinStop } from '../src/core/demo';
 import { type Action, type Rule, normalizeRules, variablesUsed } from '../src/core/logic';
 import { SOUND_IDS } from '../src/core/sounds';
-import { HUMANOID_ID } from '../src/core/humanoid';
+import { HUMANOID_FEMALE_ID, HUMANOID_ID } from '../src/core/humanoid';
 import { ITEM_MODEL_IDS } from '../src/core/items';
 import { builtInModelById, createLevelData, defaultPlayer, ensurePresetAssets, normalizeProject } from '../src/core/types';
 import { Game, levelFloor } from '../src/runtime/game';
@@ -27,7 +27,7 @@ function allActions(rules: Rule[]): Action[] {
 }
 
 describe('the blank project', () => {
-  it('is one empty level with a floor, the game objects and their variables, and no models but the player', () => {
+  it('is one empty level with a floor, the game objects and their variables, and no models but the two characters', () => {
     const p = createBlankProject();
     expect(p.levels).toHaveLength(1);
     expect(p.levels[0]!.objects.map((o) => o.name)).toEqual(['Ground']);
@@ -35,8 +35,8 @@ describe('the blank project', () => {
     // the game objects are all there, with the variables they count in
     expect(p.prefabs).toHaveLength(13);
     expect(p.variables.map((v) => v.name).sort()).toEqual(['coins', 'health', 'keys']);
-    // the Models list is the player's humanoid only
-    expect(p.models.map((m) => m.id)).toEqual([HUMANOID_ID]);
+    // the Models list is the two characters only
+    expect(p.models.map((m) => m.id)).toEqual([HUMANOID_ID, HUMANOID_FEMALE_ID]);
     expect(p.player.modelId).toBe(HUMANOID_ID);
   });
 
@@ -59,7 +59,7 @@ describe('the blank project', () => {
   it('survives saving and loading as it is', () => {
     const p = createBlankProject();
     const back = normalizeProject(JSON.parse(JSON.stringify(p)));
-    expect(back.models.map((m) => m.id)).toEqual([HUMANOID_ID]);
+    expect(back.models.map((m) => m.id)).toEqual([HUMANOID_ID, HUMANOID_FEMALE_ID]);
     expect(back.prefabs).toHaveLength(13);
   });
 });

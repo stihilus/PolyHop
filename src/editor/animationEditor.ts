@@ -26,6 +26,7 @@ import type { Store } from './store';
 import { clear, el } from './ui/dom';
 import { icon } from './ui/icons';
 import { renameInline } from './ui/rename';
+import { makeSplitter } from './ui/splitter';
 import { AxisGizmo, buildViewMenu } from './ui/viewControls';
 
 const LABEL_W = 170; // width of the bone names column of the timeline
@@ -773,7 +774,9 @@ export class AnimationEditor {
     const center = el('div', { class: 'anim-center' }, view, this.timelineEl);
 
     const right = el('aside', { class: 'panel panel-right' }, el('div', { class: 'panel-header' }, el('span', { text: 'Properties' })), this.inspectorEl);
-    return el('div', { class: 'workspace anim-workspace' }, left, center, right);
+    const workspace = el('div', { class: 'workspace anim-workspace' }, left, center);
+    workspace.append(makeSplitter(workspace, { key: 'polyhop.animRightWidth', min: 280, maxShare: 0.5 }), right);
+    return workspace;
   }
 
   private buildTimelineToolbar(): HTMLElement {

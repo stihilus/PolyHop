@@ -27,6 +27,8 @@ import { buildBehaviorEditor, buildVariablesPanel } from './ui/logicPanels';
 import { renameInline } from './ui/rename';
 import { DEFAULT_EXPORT_OPTIONS, exportGame } from './exportGame';
 import { openExportDialog } from './ui/exportDialog';
+import { shortcutSheet } from './ui/shortcutSheet';
+import { makeSplitter } from './ui/splitter';
 import { openStartDialog } from './ui/startDialog';
 import { createBlankProject, createDemoProject } from '../core/demo';
 import { AssetsPanel } from './panels/assetsPanel';
@@ -53,6 +55,7 @@ export class EditorApp {
   private assets!: AssetsPanel;
   private host!: PanelHost;
   private sceneToolbar = el('div', { class: 'panel-toolbar' });
+  private sceneFilter = '';
   private assetToolbar = el('div', { class: 'panel-toolbar hidden' });
   /** "+ New object…": pick what the new game object is made of (a block, or one of the models). */
   private newObjectSelect = el('select', { class: 'add-shape', title: 'A new game object: choose a plain block or one of your models, then give it a look and a behavior' });
@@ -69,6 +72,7 @@ export class EditorApp {
   private titleEl = el('span', { class: 'project-title' });
   private hudTop = el('div', { class: 'hud hud-top' });
   private hudBottom = el('div', { class: 'hud hud-bottom' });
+  private shortcuts = shortcutSheet(() => this.toggleShortcuts(false));
   private saveStatus = el('span', { class: 'save-status muted', text: '' });
   private saveBtn = el('button', { class: 'btn save-btn', title: 'Save everything (textures, models, level) to the project file (Ctrl/Cmd+S)' }, icon('save', 16), el('span', { text: 'Save' }));
   private levelToolbar = el('div', { class: 'model-toolbar level-toolbar' });
@@ -266,10 +270,24 @@ export class EditorApp {
       if (value === 'terrain') this.addTerrain();
       else if (value) this.addShape(value as PrimitiveKind);
     });
+    const filter = el('input', { type: 'search', class: 'scene-filter', placeholder: 'Find an object…', title: 'Show only the objects whose name has this in it (Esc clears)' });
+    filter.addEventListener('input', () => {
+      this.sceneFilter = filter.value;
+      this.refreshHierarchy();
+    });
+    filter.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        filter.value = '';
+        this.sceneFilter = '';
+        this.refreshHierarchy();
+      }
+    });
     this.sceneToolbar.append(
       addShape,
       el('button', { class: 'btn', text: 'Duplicate', onclick: () => this.duplicateSelected() }),
       el('button', { class: 'btn danger', text: 'Delete', onclick: () => this.deleteSelected() }),
+      filter,
     );
     this.newObjectSelect.addEventListener('change', () => {
       const choice = this.newObjectSelect.value;
@@ -313,7 +331,8 @@ export class EditorApp {
         this.assets.element,
         this.varsEl,
       ),
-      el('section', { class: 'viewport-wrap' }, viewportEl, this.overlay, this.hudTop, this.hudBottom),
+      el('section', { class: 'viewport-wrap' }, viewportEl, this.overlay, this.hudTop, this.hudBottom, this.shortcuts),
+      makeSplitter(this.levelWorkspace, { key: 'polyhop.levelRightWidth', min: 280, maxShare: 0.5 }),
       el(
         'aside',
         { class: 'panel panel-right' },
@@ -333,6 +352,7 @@ export class EditorApp {
       el('div', { class: 'tb-group' }, this.viewport.viewMenu.el),
       this.viewport.bar.el,
       el('div', { class: 'tb-group' }, this.undoBtn, this.redoBtn),
+      el('button', { class: 'tool-btn', text: '?', title: 'Keyboard shortcuts (?)', 'aria-label': 'Keyboard shortcuts', onclick: () => this.toggleShortcuts() }),
     );
     // settings row on top, vertical tool strip under it on the left edge (both hidden while the game plays)
     this.overlay.append(this.levelToolbar, this.viewport.bar.strip);
@@ -524,10 +544,13 @@ export class EditorApp {
       const jump = this.store.project.player.doubleJump ? `${k('jump')} jump (twice in the air)` : `${k('jump')} jump`;
       this.hudBottom.textContent = `${move} · ${k('run')} run · ${jump} · ${k('crouch')} crouch · Esc ${this.viewport.pointerLocked ? 'releases mouse' : 'stops'}`;
     } else {
-      this.hudBottom.textContent =
-        'Orbit: middle mouse (Alt+left on a trackpad) · Pan: Shift+middle · Zoom: wheel · Fly: hold right mouse + W A S D Q E · F focus · Numpad 1 3 7 views · Q W E R tools · 1 2 3 object/face/vertex · T extrude · I inset · L loop cut · U subdivide · V add vertex · M merge';
+      this.hudBottom.textContent = 'Orbit: middle mouse · Pan: Shift + middle · Zoom: wheel · Fly: hold right mouse + W A S D · ? all shortcuts';
       this.hudTop.textContent = '';
     }
+  }
+
+  private toggleShortcuts(show = this.shortcuts.classList.contains('hidden')): void {
+    this.shortcuts.classList.toggle('hidden', !show);
   }
 
   private updateHistoryButtons(): void {
@@ -654,6 +677,15 @@ export class EditorApp {
     const t = e.target as HTMLElement | null;
     const typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
     if (this.mode !== 'level') return;
+    if (!typing && e.key === '?' && !this.viewport.playing) {
+      e.preventDefault();
+      this.toggleShortcuts();
+      return;
+    }
+    if (e.code === 'Escape' && !this.shortcuts.classList.contains('hidden')) {
+      this.toggleShortcuts(false);
+      return;
+    }
     if (e.code === 'Escape' && this.viewport.playing && !this.viewport.pointerLocked) {
       this.viewport.stop();
       this.updatePlayUi();
@@ -890,7 +922,7 @@ export class EditorApp {
   }
 
   private refreshHierarchy(): void {
-    fillHierarchy(this.hierarchy, this.store);
+    fillHierarchy(this.hierarchy, this.store, this.sceneFilter);
   }
 
   private refreshInspector(): void {

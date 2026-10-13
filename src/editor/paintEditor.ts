@@ -503,6 +503,7 @@ export class PaintEditor {
           'button',
           {
             class: `tree-item${name === this.current ? ' selected' : ''}`,
+            title: mine ? name : `${name} (built-in)`,
             onclick: () => this.open(name, this.overlayModelId),
           },
           el('span', { class: 'tree-icon', text: '▦' }),

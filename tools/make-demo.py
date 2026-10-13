@@ -16,7 +16,7 @@ import random
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
@@ -438,13 +438,52 @@ for dx, dy, c in [(0, -14, (255, 232, 130)), (0, 14, (232, 176, 40)), (-8, 0, (2
 for dx, dy in ((-20, -10), (22, -6), (-14, 16), (18, 18)):
     d.point((cx + dx, cy + dy), fill=(255, 250, 220))
     d.point((cx + dx + 1, cy + dy), fill=(255, 250, 220))
-font_big = ImageFont.truetype(str(ROOT / "assets/fonts/DepartureMono-Regular.otf"), 26)
-font_small = ImageFont.truetype(str(ROOT / "assets/fonts/DepartureMono-Regular.otf"), 11)
-for text, font, y, color in (("MOSSY HILLS", font_big, 36, (255, 244, 214)), ("a PolyHop demo", font_small, 70, (255, 214, 160))):
-    w = d.textlength(text, font=font)
-    x = (W - w) / 2
-    d.text((x + 1, y + 1), text, font=font, fill=(30, 22, 50))
-    d.text((x, y), text, font=font, fill=color)
+# the lettering: a small 5 x 7 pixel font drawn here (only the letters the splash needs), so the picture does
+# not depend on a font file. Each glyph is seven rows of five pixels.
+GLYPHS = {
+    "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "D": ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+    "E": ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+    "H": ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "I": ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+    "L": ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+    "M": ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+    "O": ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "P": ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+    "S": ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+    "Y": ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
+    "a": ["00000", "00000", "01110", "00001", "01111", "10001", "01111"],
+    "d": ["00001", "00001", "01101", "10011", "10001", "10011", "01101"],
+    "e": ["00000", "00000", "01110", "10001", "11111", "10000", "01110"],
+    "l": ["01100", "00100", "00100", "00100", "00100", "00100", "01110"],
+    "m": ["00000", "00000", "11010", "10101", "10101", "10101", "10101"],
+    "o": ["00000", "00000", "01110", "10001", "10001", "10001", "01110"],
+    "p": ["00000", "00000", "11110", "10001", "11110", "10000", "10000"],
+    "y": ["00000", "00000", "10001", "10001", "01111", "00001", "01110"],
+    " ": ["00000"] * 7,
+}
+
+
+def lettering(text, scale, y, color, shadow):
+    gap = scale
+    width = sum(5 * scale + gap for _ in text) - gap
+    x0 = (W - width) // 2
+    for offset, fill in ((1, shadow), (0, color)):
+        x = x0
+        for ch in text:
+            rows = GLYPHS[ch]
+            for ry, row in enumerate(rows):
+                for rx, bit in enumerate(row):
+                    if bit == "1":
+                        d.rectangle(
+                            [x + rx * scale + offset, y + ry * scale + offset, x + (rx + 1) * scale - 1 + offset, y + (ry + 1) * scale - 1 + offset],
+                            fill=fill,
+                        )
+            x += 5 * scale + gap
+
+
+lettering("MOSSY HILLS", 3, 34, (255, 244, 214), (30, 22, 50))
+lettering("a PolyHop demo", 1, 70, (255, 214, 160), (30, 22, 50))
 sky = sky.resize((W * 2, H * 2), Image.NEAREST).quantize(48)
 out = ROOT / "assets/demo/splash.png"
 sky.save(out, optimize=True)

@@ -28,7 +28,7 @@ export class AudioEngine {
   private master: GainNode | null = null;
   private sounds = new Map<string, SoundAsset>();
   private buffers = new Map<string, Promise<AudioBuffer | null>>();
-  private music: { source: AudioBufferSourceNode; gain: GainNode; id: string } | null = null;
+  private music: { source: AudioBufferSourceNode; gain: GainNode; id: string; startedAt: number; duration: number } | null = null;
   private volume = 1;
   muted = false;
 
@@ -134,8 +134,8 @@ export class AudioEngine {
     });
   }
 
-  /** Start a music loop (replacing the one playing). null stops the music. */
-  playMusic(id: string | null): void {
+  /** Start a music loop (replacing the one playing), `offset` seconds into it. null stops the music. */
+  playMusic(id: string | null, offset = 0): void {
     if (this.music && this.music.id === id) return;
     this.stopMusic();
     if (!id) return;
@@ -152,8 +152,9 @@ export class AudioEngine {
       const gain = ctx.createGain();
       gain.gain.value = sound.volume;
       source.connect(gain).connect(this.master);
-      source.start();
-      this.music = { source, gain, id };
+      const from = buf.duration > 0 ? ((offset % buf.duration) + buf.duration) % buf.duration : 0;
+      source.start(0, from);
+      this.music = { source, gain, id, startedAt: ctx.currentTime - from, duration: buf.duration };
     });
   }
 
@@ -166,6 +167,14 @@ export class AudioEngine {
     }
     this.music.source.disconnect();
     this.music = null;
+  }
+
+  /** Seconds into the loop that is playing now, or null when no music plays. */
+  musicPosition(): number | null {
+    const m = this.music;
+    const ctx = this.ctx;
+    if (!m || !ctx || m.duration <= 0) return null;
+    return (ctx.currentTime - m.startedAt) % m.duration;
   }
 
   /** Is this sound the music being played? */

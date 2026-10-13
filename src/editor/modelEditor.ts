@@ -36,6 +36,7 @@ import { clear, el } from './ui/dom';
 import { type Field, buildForm } from './ui/form';
 import { icon } from './ui/icons';
 import { renameInline } from './ui/rename';
+import { makeSplitter } from './ui/splitter';
 import { TransformBar } from './ui/transformBar';
 import { AxisGizmo, buildViewMenu } from './ui/viewControls';
 
@@ -312,33 +313,8 @@ export class ModelEditor {
     );
 
     // draggable splitter between the 3D view and the right panel (the UV view likes width)
-    const splitter = el('div', { class: 'splitter', title: 'Drag to resize' });
-    const root = el('div', { class: 'workspace model-workspace' }, left, center, splitter, right);
-    try {
-      const saved = localStorage.getItem('polyhop.rightWidth');
-      if (saved) root.style.setProperty('--right-w', `${parseInt(saved, 10)}px`);
-    } catch {
-      // storage can be unavailable (private mode); the default width is fine
-    }
-    splitter.addEventListener('pointerdown', (e) => {
-      splitter.setPointerCapture(e.pointerId);
-      const rect = root.getBoundingClientRect();
-      const move = (ev: PointerEvent) => {
-        const w = Math.min(rect.width * 0.7, Math.max(300, rect.right - ev.clientX - 3));
-        root.style.setProperty('--right-w', `${Math.round(w)}px`);
-      };
-      const up = () => {
-        splitter.removeEventListener('pointermove', move);
-        splitter.removeEventListener('pointerup', up);
-        try {
-          localStorage.setItem('polyhop.rightWidth', String(parseInt(root.style.getPropertyValue('--right-w'), 10)));
-        } catch {
-          // ignore
-        }
-      };
-      splitter.addEventListener('pointermove', move);
-      splitter.addEventListener('pointerup', up);
-    });
+    const root = el('div', { class: 'workspace model-workspace' }, left, center);
+    root.append(makeSplitter(root, { key: 'polyhop.rightWidth', min: 300, maxShare: 0.7 }), right);
     return root;
   }
 

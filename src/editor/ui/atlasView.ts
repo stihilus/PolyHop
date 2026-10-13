@@ -1,5 +1,6 @@
 import { type UVPoly, pointInPoly, translateUv } from '../../core/uv';
 import { el } from './dom';
+import { UI_FONT_STACK } from '../../core/fonts';
 
 export interface AtlasLayer {
   id: string;
@@ -176,7 +177,7 @@ export class AtlasView {
     const tex = this.opts.texture();
     if (!tex) {
       ctx.fillStyle = '#8a93a3';
-      ctx.font = '11px "Departure Mono", monospace';
+      ctx.font = `11px ${UI_FONT_STACK}`;
       ctx.textAlign = 'center';
       ctx.fillText('No texture selected', this.cssW / 2, this.cssH / 2);
       this.status.textContent = '';
@@ -293,7 +294,7 @@ export class AtlasView {
           ctx.fill();
           ctx.stroke();
           ctx.fillStyle = '#ffd68a';
-          ctx.font = '11px "Departure Mono", monospace';
+          ctx.font = `11px ${UI_FONT_STACK}`;
           ctx.textAlign = 'left';
           ctx.fillText(String(i + 1), p[0] + 8, p[1] - 6);
         });
@@ -306,7 +307,7 @@ export class AtlasView {
         const cx = pts.reduce((sum, p) => sum + p[0], 0) / pts.length;
         const cy = pts.reduce((sum, p) => sum + p[1], 0) / pts.length;
         ctx.fillStyle = 'rgba(255,255,255,0.75)';
-        ctx.font = '11px "Departure Mono", monospace';
+        ctx.font = `11px ${UI_FONT_STACK}`;
         ctx.textAlign = 'center';
         ctx.fillText(layer.label, cx, cy);
       }

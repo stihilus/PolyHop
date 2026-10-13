@@ -2,6 +2,8 @@
 // dragging on the right half to look, and buttons for jump, run, crouch and interact.
 // `TouchState` is the pure part (pointers in, input out); `TouchControls` draws it and feeds it.
 
+import { UI_FONT_STACK } from '../core/fonts';
+
 export type TouchButton = 'jump' | 'run' | 'crouch' | 'interact';
 export type TouchRole = 'move' | 'look' | TouchButton;
 
@@ -164,7 +166,7 @@ export class TouchControls {
       touchAction: 'none',
       userSelect: 'none',
       webkitUserSelect: 'none',
-      fontFamily: '"Departure Mono", ui-monospace, monospace',
+      fontFamily: UI_FONT_STACK,
     } as Partial<CSSStyleDeclaration>);
 
     const zone = (role: TouchRole, left: string, width: string) => {

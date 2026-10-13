@@ -2,7 +2,7 @@
 // so a project file stays human-readable and hand-editable.
 
 import { packRects } from './atlasPack';
-import { HUMANOID_ID, OLD_HUMANOID_SKINS, createHumanoidModel, refreshHumanoidLayout } from './humanoid';
+import { HUMANOID_FEMALE_ID, HUMANOID_ID, HUMANOID_IDS, OLD_HUMANOID_SKINS, createHumanoidModel, refreshHumanoidLayout } from './humanoid';
 import { ITEMS_ATLAS, ITEM_MODEL_IDS, type ItemKind, TILE, createItemModel } from './items';
 import { type Rule, type Variable, normalizeRules, normalizeVariables } from './logic';
 import { PRESETS, type PresetKind, missingVariables, presetRules, presetSounds, presetVariables } from './presets';
@@ -749,8 +749,9 @@ export function defaultLevel(): LevelObject[] {
  * blocks of the first prop set were taken out again. 8: the building kit and the modeled trees are in
  * every project. 9: the Slime and Villager models, and a glide pose for the humanoid. 10: the models that
  * come as files (assets/models) are in every project. 11: the humanoid was rebuilt (new parts, bone names and skins).
+ * 12: the humanoid has no nose and its hair is a part of its own; there is a female build as well.
  */
-export const PROJECT_VERSION = 11;
+export const PROJECT_VERSION = 12;
 
 export function createDefaultProject(): Project {
   return {
@@ -760,6 +761,7 @@ export function createDefaultProject(): Project {
     textures: [],
     models: [
       createHumanoidModel(newId),
+      createHumanoidModel(newId, HUMANOID_FEMALE_ID),
       createItemModel('coin', newId),
       createItemModel('key', newId),
       createItemModel('apple', newId),
@@ -783,12 +785,12 @@ export function createDefaultProject(): Project {
 }
 
 /**
- * A fresh copy of a built-in model by its id (the humanoid, a pickup, a prop, a piece of the kit or a model of
+ * A fresh copy of a built-in model by its id (the humanoids, a pickup, a prop, a piece of the kit or a model of
  * assets/models), or null when there is no such model. For previews of game objects whose model is not in the
  * project yet.
  */
 export function builtInModelById(id: string): Model | null {
-  if (id === HUMANOID_ID) return createHumanoidModel(newId);
+  if (HUMANOID_IDS.includes(id)) return createHumanoidModel(newId, id);
   for (const kind of Object.keys(ITEM_MODEL_IDS) as ItemKind[]) {
     if (ITEM_MODEL_IDS[kind] === id) return createItemModel(kind, newId);
   }
@@ -960,12 +962,18 @@ export function normalizeProject(raw: unknown): Project {
     const saved = models.find((m) => m.id === HUMANOID_ID);
     if (saved) refreshHumanoidLayout(saved, createHumanoidModel(newId));
   }
-  // version 11: the humanoid was rebuilt from scratch (other parts, bone names and skins): a saved one is replaced
-  if (rawVersion < 11) {
+  // version 11 and 12: the humanoid was rebuilt from scratch (other parts, bone names, skins; then no nose and the
+  // hair as parts of its own): a saved one is replaced, and the female build is added
+  if (rawVersion < 12) {
     const at = models.findIndex((m) => m.id === HUMANOID_ID);
     if (at >= 0) models[at] = createHumanoidModel(newId);
+    if (r.exported !== true && !models.some((m) => m.id === HUMANOID_FEMALE_ID)) models.splice(at >= 0 ? at + 1 : models.length, 0, createHumanoidModel(newId, HUMANOID_FEMALE_ID));
     // a skin by an old name is the same skin in the new layout
     if (player.skin && player.skin in OLD_HUMANOID_SKINS) player.skin = OLD_HUMANOID_SKINS[player.skin] ?? null;
+    // the nose is gone: something worn on it sits on the head now
+    for (const a of player.attachments) if (a.bone === 'Nose') a.bone = 'Head';
+  }
+  if (rawVersion < 11) {
     // things worn on a bone of the old rig follow the bone that took its place
     const renamed: Record<string, string> = {
       RightShoulder: 'RightUpperArm',

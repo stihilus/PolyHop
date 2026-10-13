@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { CameraNav, ViewName } from '../cameraNav';
 import { el } from './dom';
+import { UI_FONT_STACK } from '../../core/fonts';
 
 const VIEW_OPTIONS: { value: ViewName; label: string }[] = [
   { value: 'perspective', label: 'Perspective' },
@@ -83,7 +84,7 @@ export class AxisGizmo {
     }).sort((p, q) => p.depth - q.depth);
 
     this.hit = [];
-    ctx.font = '11px "Departure Mono", monospace';
+    ctx.font = `600 11px ${UI_FONT_STACK}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const it of items) {

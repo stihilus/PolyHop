@@ -5,7 +5,7 @@ import {
   packageFiles,
   zipPackage,
 } from '../core/exportPackage';
-import fontUrl from '../../assets/fonts/DepartureMono-Regular.otf?url';
+import fontUrl from '../../assets/fonts/Inter.woff2?url';
 import type { FileSession } from './fileSession';
 import type { Store } from './store';
 

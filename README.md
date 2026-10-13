@@ -242,7 +242,8 @@ opened and changed:
 | **2. Sky Ruins** (harder, a sunset) | Islands and stones in the air, a moving platform, a run of narrow pillars that need a run and a double jump, spikes, slimes, a spring mushroom up to a high ledge with the **key**, a glide over a big gap (the demo turns **Glide** on), a temple with a **locked door** and the **trophy**. Bonus stars can be found on the way. Falling puts you back at the checkpoint. |
 
 The hero wears **Character-Explorer.png**, a skin made for the demo (a green cap, a red scarf, a tunic and boots;
-`tools/make-humanoid.py`). It is in every project: select the player > Skin.
+`tools/make-humanoid.py`). It is in every project: select the player > Skin. (The same outfit exists for the
+female character as `Character-Female-Explorer.png`.)
 
 ### Building kit and trees (Models)
 
@@ -271,16 +272,22 @@ tab, shapes, animations and bones. Renaming a bone also renames it in every anim
 The player is **1.8 m tall** by default (Width 0.6 m, crouch 1.1 m, camera 6.5 m behind). The model is scaled to the
 player's **Height**, so changing it changes both what you see and the collision shape.
 
-New projects start with a low-poly **Humanoid**: 20 parts (a head with a jaw, a nose and ears, a neck, chest, waist
-and hips, arms with upper arm, forearm and hand, legs with thigh, shin and foot) that narrow toward the wrists and
-ankles, so the body is not a stack of plain boxes. It is a normal model with a skeleton (`Root`, `Hips`, `Waist`,
-`Chest`, `Neck`, `Head`, `RightUpperArm`, `RightForearm`, `RightHand`, `RightThigh`, `RightShin`, `RightFoot`
-and the same on the left), so everything below also works for models you make or import.
+New projects have two low-poly characters, **Humanoid** and **Humanoid (female)**, built like the figures of
+a stylized adventure game: a big head that is nearly a cube (a quarter of the body), no nose in the geometry (the
+face with its big eyes is painted), small ears, a short neck, a broad chest, arms with a separate hand, legs with
+a long flat foot. The hair is made of parts of its own (a cap over the head and a slab behind it; the female
+character also has two locks at the sides and hair down her back) that follow the head, so a skin can give the
+character any hair, a cap or none. Every part is a box that narrows toward the wrists and ankles, so the body is not
+a stack of plain boxes. Both are normal models with the same skeleton (`Root`, `Hips`, `Waist`, `Chest`, `Neck`,
+`Head`, `RightUpperArm`, `RightForearm`, `RightHand`, `RightThigh`, `RightShin`, `RightFoot` and the same on the
+left, plus the ears), so every animation fits both, and everything below also works for models you make or import.
+The female build differs in its proportions: narrower shoulders and waist, wider hips, slimmer arms. Pick the
+model in Player > Look > Model; its skin follows when you change from one to the other.
 
 | What | How |
 | --- | --- |
 | **Animation** | The Humanoid has `idle`, `walk`, `run`, `jump`, `fall`, `glide`, `swim`, `crouch` and `crouch_walk`. The player picks one from what it is doing (speed, in the air, crouching) and blends between them. A walk plays faster when the player is faster. |
-| **Skin** | Select the player > **Skin**. Any texture with the Humanoid's layout works: `Character-Skin.png` (a plain outfit), `Character-Explorer.png` (the demo's hero) and `Character-Template.png`, which paints every body part in its own color with a white dot in the corner of each face, so you can see where things go. Paint a skin in the Paint tab. |
+| **Skin** | Select the player > **Skin**. Any texture with the layout of the model works. For the Humanoid: `Character-Skin.png` (a plain outfit), `Character-Explorer.png` (the demo's hero) and `Character-Template.png`; for the female one: `Character-Female-Skin.png`, `Character-Female-Explorer.png` and `Character-Female-Template.png`. A template paints every body part in its own color with a white dot in the corner of each face, so you can see where things go. Paint a skin in the Paint tab: clear pixels on the hair parts show the head under them, so a character can be bald. |
 | **Attachments** | Select the player > **Attachments > + Attach a model…**. A model (hat, hair, backpack) hangs on a bone such as `Head`, with an offset, rotation and scale, and follows the animation. Bones are matched by name, so attachments survive a model swap. |
 | **Rig panel** | Models tab > **Rig**: lists the bones (name, parent, pivot), adds bones, previews every animation (and **Edit animations →** opens the animation editor). A shape's **Bone** says what it moves with. |
 | **Import** | File > **Import rig model (.json)…** reads a Blockbench Hytale "blockymodel" file (elements with `from` / `to`, `rotationOrigin`, per-face UVs and children) as a model with bones. Import its PNG in the Paint tab, then pick it as the model's texture. |
@@ -288,11 +295,13 @@ and the same on the left), so everything below also works for models you make or
 Conventions: the model's origin is the middle of its feet, +Y is up and **+Z is the front**; the right
 hand of a character is toward -X. Animation clips are plain keyframes (rotation in degrees, position
 in meters) keyed by bone name, so a clip works on any rig with bones of those names.
-`python3 tools/make-humanoid.py` makes the humanoid (`src/core/humanoid.model.json`) and draws the three skins from
-the same numbers, so they always fit. The skin is 128 × 128 px: every part has a cross of its six faces (top and
-bottom above, then right, front, left and back), packed row by row; left and right limbs have rectangles of their own.
-Projects made before this version get the new humanoid when they are opened (a skin by an old name becomes the same
-skin by its new name).
+`python3 tools/make-humanoid.py` makes both characters (`src/core/humanoid.model.json` and
+`humanoid-female.model.json`) and draws the six skins from the same numbers, so they always fit. A skin is
+128 × 128 px: every part has a cross of its six faces (top and bottom above, then right, front, left and back),
+packed row by row; left and right limbs have rectangles of their own. The two characters have layouts of their own
+(their parts differ in size), so a skin is for one of them. Projects made before this version get the new humanoid
+when they are opened (a skin by an old name becomes the same skin by its new name; things worn on the old nose
+move to the head).
 
 ### Grass, leaves and other transparent textures
 
@@ -337,7 +346,10 @@ The **Audio** tab holds every sound of the project. Nothing needs a sound file: 
 | What | How |
 | --- | --- |
 | **Sound effect** | *+ Sound effect*, then pick a preset (Coin, Jump, Hit, Power-up, Explosion, Laser, Blip, Door, Random) and tune the sliders (envelope, pitch, tone, filter). **Mutate** nudges every value a little. Sliders play the sound when released. |
-| **Music** | *+ Music*: tempo, scale, key, a loop of 8 to 512 steps (16 steps = one bar, 512 = 32 bars) and up to 8 channels. Click the grid to place notes. **Random tune** writes a lively melody in the chosen scale, **Calm tune** a slow spacious one (see below). |
+| **Music** | *+ Music*: tempo, scale, key, a loop of 8 to 512 steps (16 steps = one bar, 512 = 32 bars) and up to 8 channels, edited in a piano roll (below). **Random tune** writes a lively melody in the chosen scale, **Calm tune** a slow spacious one (see below). |
+| **Piano roll** | The rows are the notes of the scale (named on the keys at the left; the root is tinted), the columns are steps, with bars and beats marked on the ruler. **Click** puts a note (and plays it), **click it again** takes it away, **drag** draws a run of notes, **right-drag** (or Alt + drag) erases. A note is drawn as long as it lasts; a piano's fades, a pad's swells. The other channels show as faint lines, so a bass and a melody can be lined up. **Space** plays and stops, a **play position** moves along the loop, and a click on a bar number selects the bar and (while playing) jumps there. |
+| **Bar tools** | With a bar selected (or none: the whole channel): **Copy** and **Paste** (Ctrl/Cmd + C, V), **Repeat →** copies the bar over all the bars after it, **Clear** (Delete), **↑ ↓** move the notes up and down the scale (Shift = an octave) and **← →** move them in time (Alt + arrows). **Undo / Redo** (Ctrl/Cmd + Z) take back any change. |
+| **Mute and solo** | **M** and **S** on a channel tab silence it, or everything else, in the preview only; the tune itself does not change. |
 | **Instruments** | Per channel: *Square*, *Triangle*, *Sawtooth*, *Sine* (chip sounds), *Soft piano*, *Bell*, *Pad* (soft, slow swell) and *Noise (drums)*. **note: N steps** is how long a note lasts: a piano rings that long, a pad swells and fades over it, chip notes fill it. |
 | **Space** | A slider for the size of the room (reverb): the notes ring on and fill the gaps. The loop wraps around, so the tail of the last notes runs into the start without a seam. |
 | **Import** | *Import…* reads a WAV / OGG / MP3 file (stored inside the project). |
@@ -360,7 +372,7 @@ track to get another one (other key, tempo and chords) and make it your own. Pro
 ```
 index.html              the start screen, the project data and the options
 player.js               the game itself (no editor code, ~170 KB gzipped)
-DepartureMono-Regular.otf
+Inter.woff2             the typeface of the on-screen texts (33 KB)
 ```
 
 Upload the zip to itch.io as an HTML game (kind of project: *HTML*, tick *This file will be played in the
@@ -429,6 +441,15 @@ they have fallen 30 m below the lowest thing of the level, so a level never need
 
 The "Perspective" menu and the axis gizmo (top right of the view) do the same view switches without a
 numpad. While the right button flies the camera, W A S D Q E drive the camera, not the tool shortcuts.
+
+### Finding your way around the editor
+
+- **Shortcut sheet.** The **?** button in the bar over the view (or the **?** key) lists every shortcut; **Esc** closes it.
+- **Find an object.** The scene list has a filter ("Find an object…"): it shows only the objects whose name has the
+  text in it. Without a filter, a row of three or more objects with the same name (a fence, a trail of coins) is folded
+  into one line (*Coin × 24*): click it to open, **Shift + click** to select them all.
+- **Wider panels.** Drag the thin divider between the view and the right panel (Level, Models, Animate) to make
+  Properties wider (a rule with long text likes it); double-click puts it back. The width is remembered.
 
 ### Selecting several objects (Level)
 
@@ -531,9 +552,9 @@ axes, snap and undo / redo. Hover an icon for its name and shortcut.
 
 ## Look
 
-The editor is set in **Departure Mono** (`assets/fonts/DepartureMono-Regular.otf`, SIL Open Font License), a
-pixel font drawn on an 11 px grid, so all text is 11 px (22 px for big headings). The on-screen HUD of a
-running game uses it as well.
+The editor is set in **Inter** (`assets/fonts/Inter.woff2`, a Latin subset, SIL Open Font License; the system
+sans-serif font stands in until it has loaded). The on-screen HUD of a running game uses it as well; an export
+carries the file along.
 
 ## Models, UVs and textures
 
@@ -546,7 +567,7 @@ running game uses it as well.
 - Built-in atlases (`assets/textures`): `Textures-16.png` (the main one, used by the default level),
   `Seamless-16.png` (192 seamless 16 × 16 tiles), and the special ones: `Items-16.png` (pickups),
   `Plants-16.png` (grass and flowers with transparency), `Props-16.png` (80 tiles for the prop models below),
-  `Character-Skin.png` / `Character-Template.png` / `Character-Explorer.png` (the skins of the humanoid),
+  `Character-*.png` (the skins and templates of the two humanoids),
   `Kit-16.png` (building kit) and `Demo-16.png` (the demo's crystals and ruins).
   Drop any PNG there (name it `Something-16.png` for a 16 px tile size) and it is offered everywhere.
   New blocks and models start on the first atlas whose default tile has pixels in it.

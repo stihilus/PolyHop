@@ -2,6 +2,7 @@
 // the editor fetches the player script and the font, this module puts the files together.
 
 import { zipSync } from 'fflate';
+import { UI_FONT_FAMILY, UI_FONT_STACK } from './fonts';
 
 export interface ExportOptions {
   /** Show the list of controls on the start screen. */
@@ -13,7 +14,7 @@ export interface ExportOptions {
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = { showControls: true, background: '#14161b' };
 
 export const PLAYER_FILE = 'player.js';
-export const FONT_FILE = 'DepartureMono-Regular.otf';
+export const FONT_FILE = 'Inter.woff2';
 
 /** JSON that is safe inside a <script> element: no `</script>` or `<!--` can be formed. */
 export function jsonForHtml(value: unknown): string {
@@ -40,7 +41,7 @@ export interface PageInput {
 export function playerHtml(input: PageInput): string {
   const color = /^#[0-9a-fA-F]{3,8}$/.test(input.options.background) ? input.options.background : '#14161b';
   const font = input.fontFile
-    ? `@font-face{font-family:'Departure Mono';src:url('${input.fontFile}') format('opentype');font-display:swap}`
+    ? `@font-face{font-family:'${UI_FONT_FAMILY}';src:url('${input.fontFile}') format('woff2');font-weight:400 700;font-display:swap}`
     : '';
   return `<!doctype html>
 <html lang="en">
@@ -50,7 +51,7 @@ export function playerHtml(input: PageInput): string {
 <title>${escapeText(input.title)}</title>
 <style>
 ${font}
-html,body{margin:0;height:100%;background:${color};overflow:hidden;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;font-family:'Departure Mono',ui-monospace,Menlo,Consolas,monospace}
+html,body{margin:0;height:100%;background:${color};overflow:hidden;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none;font-family:${UI_FONT_STACK}}
 #game{position:relative;width:100%;height:100%}
 canvas{display:block;width:100%;height:100%;touch-action:none}
 </style>

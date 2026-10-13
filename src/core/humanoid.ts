@@ -1,19 +1,49 @@
-// The built-in character: a low-poly humanoid (head with ears and a nose, neck, chest, waist, hips, arms
-// with hands, legs with feet) with a skeleton and ready animations. Its parts, joints and UV layout are
-// made by tools/make-humanoid.py (humanoid.model.json); the skins in assets/textures are drawn for that layout.
+// The built-in characters: a low-poly humanoid, a male and a female build (a big head without a nose,
+// ears and hair as parts of their own, neck, chest, waist, hips, arms with hands, legs with feet) with a
+// skeleton and ready animations. Their parts, joints and UV layouts are made by tools/make-humanoid.py
+// (humanoid.model.json, humanoid-female.model.json); the skins in assets/textures are drawn for those layouts.
+// Both builds have the same bones, so the animations fit both.
 
 import * as THREE from 'three';
-import model from './humanoid.model.json';
+import female from './humanoid-female.model.json';
+import male from './humanoid.model.json';
 import { humanoidClips } from './humanoidClips';
 import type { Bone, Model, ModelCube, Vec3 } from './types';
 
 export const HUMANOID_ID = 'humanoid';
+export const HUMANOID_FEMALE_ID = 'humanoid-female';
+/** The built-in characters, in the order the editor lists them. */
+export const HUMANOID_IDS: readonly string[] = [HUMANOID_ID, HUMANOID_FEMALE_ID];
 /** Built-in skin atlas (assets/textures) the humanoid is drawn with by default. */
 export const HUMANOID_SKIN = 'Character-Skin.png';
 /** Skin template: every body part in its own flat color, for painting new skins. */
 export const HUMANOID_TEMPLATE = 'Character-Template.png';
 /** The explorer skin made for the demo project. */
 export const HUMANOID_EXPLORER = 'Character-Explorer.png';
+export const HUMANOID_FEMALE_SKIN = 'Character-Female-Skin.png';
+export const HUMANOID_FEMALE_TEMPLATE = 'Character-Female-Template.png';
+export const HUMANOID_FEMALE_EXPLORER = 'Character-Female-Explorer.png';
+/** The skins made for each build (the first is the build's own default), the way they go with the other build's. */
+export const HUMANOID_SKINS: Record<string, string[]> = {
+  [HUMANOID_ID]: [HUMANOID_SKIN, HUMANOID_EXPLORER, HUMANOID_TEMPLATE],
+  [HUMANOID_FEMALE_ID]: [HUMANOID_FEMALE_SKIN, HUMANOID_FEMALE_EXPLORER, HUMANOID_FEMALE_TEMPLATE],
+};
+
+/**
+ * The skin to use when the character changes from one build to the other: the same one for the other build
+ * when the current skin is one of the built-in ones, else the skin is kept (it is the user's own).
+ */
+export function skinForBuild(skin: string | null, modelId: string): string | null {
+  if (!skin) return null;
+  const to = HUMANOID_SKINS[modelId];
+  if (!to) return skin;
+  for (const [id, list] of Object.entries(HUMANOID_SKINS)) {
+    if (id === modelId) continue;
+    const at = list.indexOf(skin);
+    if (at >= 0) return to[at] ?? null;
+  }
+  return skin;
+}
 /** Names the skins of the first versions had; a project that still uses one is given a current skin. */
 export const OLD_HUMANOID_SKINS: Record<string, string | null> = {
   'Humanoid-Skin.png': null,
@@ -60,9 +90,10 @@ export function anchorOf(cube: Pick<ModelCube, 'position' | 'rotation' | 'mesh'>
   return [pick.reduce((a, p) => a + p[0], 0) / n, pick.reduce((a, p) => a + p[1], 0) / n, pick.reduce((a, p) => a + p[2], 0) / n];
 }
 
-/** A fresh copy of the humanoid (new ids every time except the model's own, which is `HUMANOID_ID`). */
-export function createHumanoidModel(idGen: () => string): Model {
-  const raw = model as unknown as { bones: RawBone[]; cubes: RawCube[] };
+/** A fresh copy of a built-in character (new ids every time except the model's own: `HUMANOID_ID` or `HUMANOID_FEMALE_ID`). */
+export function createHumanoidModel(idGen: () => string, id: string = HUMANOID_ID): Model {
+  const isFemale = id === HUMANOID_FEMALE_ID;
+  const raw = (isFemale ? female : male) as unknown as { bones: RawBone[]; cubes: RawCube[] };
   const boneIds = new Map(raw.bones.map((b) => [b.id, idGen()] as const));
   const bones: Bone[] = raw.bones.map((b) => ({
     id: boneIds.get(b.id)!,
@@ -81,7 +112,14 @@ export function createHumanoidModel(idGen: () => string): Model {
     },
     bone: c.bone ? (boneIds.get(c.bone) ?? null) : null,
   }));
-  return { id: HUMANOID_ID, name: 'Humanoid', texture: HUMANOID_SKIN, cubes, bones, clips: humanoidClips(idGen) };
+  return {
+    id: isFemale ? HUMANOID_FEMALE_ID : HUMANOID_ID,
+    name: isFemale ? 'Humanoid (female)' : 'Humanoid',
+    texture: isFemale ? HUMANOID_FEMALE_SKIN : HUMANOID_SKIN,
+    cubes,
+    bones,
+    clips: humanoidClips(idGen),
+  };
 }
 
 /**

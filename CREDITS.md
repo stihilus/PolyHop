@@ -12,7 +12,8 @@ PolyHop is built on these open source projects and assets.
 
 ## Font
 
-**Departure Mono** by Helena Zhang (<https://departuremono.com>), used for the editor and the on-screen HUD of games.
+**Inter** by The Inter Project Authors (<https://github.com/rsms/inter>), used for the editor and the on-screen HUD of
+games (`assets/fonts/Inter.woff2` is a Latin subset of Inter 4.0 with the weights 400 to 700).
 SIL Open Font License 1.1, the license text is in `assets/fonts/OFL.txt`.
 
 ## Art and sound made for PolyHop

@@ -35,7 +35,7 @@ import {
   newId,
 } from './types';
 import { DEMO_SPLASH_IMAGE } from './demoAssets';
-import { HUMANOID_EXPLORER, HUMANOID_ID } from './humanoid';
+import { HUMANOID_EXPLORER, HUMANOID_IDS } from './humanoid';
 import { type PresetKind, presetRules } from './presets';
 import { kitModelId } from './kit';
 import { propModelId } from './props';
@@ -44,13 +44,13 @@ import { propModelId } from './props';
 
 /**
  * An empty project: one flat ground and the player on it. The game objects (coin, door, slime ...) and the
- * variables they use are there; of the models only the player's humanoid is, the rest (props, building kit ...)
+ * variables they use are there; of the models only the two characters are, the rest (props, building kit ...)
  * is added when a game object that needs one is placed, so the Models list starts out as your own.
  */
 export function createBlankProject(): Project {
   const p = createDefaultProject();
   p.settings.name = 'My Game';
-  p.models = p.models.filter((m) => m.id === HUMANOID_ID);
+  p.models = p.models.filter((m) => HUMANOID_IDS.includes(m.id));
   p.levels = [createLevelData('Level 1', emptyLevelObjects(), [0, 0.05, 0], 180)];
   return p;
 }
