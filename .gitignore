@@ -1,0 +1,12 @@
+node_modules
+dist
+.DS_Store
+.claude
+
+# built by `npm run build:player` (runs before `npm run dev` and `npm run build`)
+public/player
+
+# the originals kept next to the project; the copies in assets/ are what the editor uses
+/Textures-16.png
+/DepartureMono-Regular.otf
+/sprite sheet 16x16px seamless textures.png
