@@ -21,7 +21,8 @@ Textures: every PNG in `assets/textures/` is an atlas. The tile size is parsed f
 ## Layout
 
 ```
-src/core/      project data model (plain JSON), meshes and their edit operations, UVs, pixels, storage
+src/core/      project data model (plain JSON), meshes and their edit operations, UVs, pixels, storage;
+               components.ts: masters, instances, variants, nested components, tile or UV
 src/runtime/   everything the exported game needs: physics, player controller, camera, input (keyboard, mouse,
                gamepad, touch), level, model meshes, player preferences
 src/player/    the exported game's page: start / pause screen, the player's settings menu, touch controls

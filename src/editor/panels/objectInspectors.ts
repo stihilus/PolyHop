@@ -219,7 +219,9 @@ export function buildModelInstanceInspector(host: PanelHost, obj: LevelModelInst
     el('div', { class: 'section-title', text: `${comp ? 'Component' : 'Object'} · ${obj.name}` }),
     comp
       ? componentBadge(
-          master ? `Master of “${model?.name}”. Its shapes are edited here or in Models; every instance follows it.` : `Instance of “${model?.name}”. It follows the component; its shapes are edited in the master.`,
+          master
+            ? `Master of “${model?.name}”. Its size, look and behavior are edited here, its shapes in Models; every instance follows it.`
+            : `Instance of “${model?.name}”. It follows the component; its shapes are edited in the master (Models).`,
           master ? 'master' : 'instance',
         )
       : componentBadge('An ordinary object made of shapes of its own.', 'object'),
