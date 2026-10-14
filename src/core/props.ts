@@ -1,8 +1,8 @@
 // The built-in character props (Slime, Villager), drawn with the tiles of assets/textures/Props-16.png
 // (made by tools/make-props.py). The atlas itself stays, with all its tiles, for anyone to build with. The two
-// models are put in a project when its Enemy / NPC game object is placed (see ensurePresetAssets) and are
-// ordinary models after that: re-texture them, change their cubes, animate them. Like all built-in models they
-// are made of cubes and quads only, as the Hytale modeling guide asks (see hytaleStyle.ts).
+// models are in every new project's Models (and are made again when their Enemy / NPC game object is placed, see
+// ensurePresetAssets) and are ordinary models after that: re-texture them, change their cubes, animate them. Like
+// all built-in models they are made of cubes and quads only, as the Hytale modeling guide asks (see hytaleStyle.ts).
 
 import { ModelBuilder } from './modelBuilder';
 import type { Model } from './types';

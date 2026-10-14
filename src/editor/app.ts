@@ -8,6 +8,7 @@ import {
   type LevelObject,
   type Prefab,
   type Vec3,
+  builtInModelById,
   createBlock,
   createDefaultProject,
   createModelInstance,
@@ -237,6 +238,7 @@ export class EditorApp {
       applyPreset: (obj, kind) => this.applyPreset(obj, kind),
       setMode: (mode) => this.setMode(mode),
       setLeftTab: (tab) => this.setLeftTab(tab),
+      openModel: (id) => this.openModel(id),
       openAnimation: (id) => this.openAnimation(id),
       selectAsset: (sel) => this.selectAsset(sel),
       placePrefab: (id, at) => this.placePrefab(id, at),
@@ -604,9 +606,25 @@ export class EditorApp {
   }
 
   private editSelectedAsset(): void {
-    const id = this.selectedAssetId ?? this.store.project.models[0]?.id ?? null;
+    // a game object made of a model opens that model
+    const prefab = this.selectedPrefabId ? this.store.getPrefab(this.selectedPrefabId) : undefined;
+    const ofPrefab = prefab && prefab.object.kind === 'model' ? prefab.object.modelId : null;
+    const id = this.selectedAssetId ?? ofPrefab ?? this.store.project.models[0]?.id ?? null;
+    if (id) this.openModel(id);
+    else this.setMode('model');
+  }
+
+  /**
+   * Open a model in the Models tab. A built-in one that is not in the project (a game object's model that was
+   * deleted from Models, or never added) is put back first, so there is always something to look at and edit.
+   */
+  openModel(modelId: string): void {
+    if (!this.store.getModel(modelId)) {
+      const builtIn = builtInModelById(modelId);
+      if (builtIn) this.store.addModel(builtIn);
+    }
     this.setMode('model');
-    if (id) this.modelEditor.open(id);
+    this.modelEditor.open(modelId);
   }
 
   /** A fresh game object asset made of a plain block or of the given model. */
@@ -644,6 +662,10 @@ export class EditorApp {
 
   /** Switch to the animation editor with a model open. */
   openAnimation(modelId: string | null): void {
+    if (modelId && !this.store.getModel(modelId)) {
+      const builtIn = builtInModelById(modelId);
+      if (builtIn) this.store.addModel(builtIn);
+    }
     this.setMode('animate');
     this.animationEditor.open(modelId);
   }

@@ -652,7 +652,7 @@ export function createModelInstance(model: Model, position: Vec3): LevelModelIns
  * 13: the characters got a smaller, squarer head (a new layout, so the skins changed too).
  * 14: the built-in models were redrawn as cubes and quads only (the Hytale modeling guide); the characters too.
  */
-export const PROJECT_VERSION = 14;
+export const PROJECT_VERSION = 15;
 
 export function createDefaultProject(): Project {
   return {
@@ -660,9 +660,14 @@ export function createDefaultProject(): Project {
     settings: defaultSettings(),
     player: defaultPlayer(),
     textures: [],
-    // only the characters: the two humanoids and the Slime and Villager. The pickups (coin, key, ...) are put in
-    // when their game object is placed (ensurePresetAssets)
-    models: [createHumanoidModel(newId), createHumanoidModel(newId, HUMANOID_FEMALE_ID), ...builtInPropModels(newId)],
+    // only what the game objects are made of: the two humanoids, the pickups (coin, key, apple, flag, trophy) and the
+    // Slime and Villager, so each game object has its model to look at and edit. Nothing else is built in.
+    models: [
+      createHumanoidModel(newId),
+      createHumanoidModel(newId, HUMANOID_FEMALE_ID),
+      ...(Object.keys(ITEM_MODEL_IDS) as ItemKind[]).map((kind) => createItemModel(kind, newId)),
+      ...builtInPropModels(newId),
+    ],
     variables: [],
     sounds: Object.values(SOUND_IDS)
       .map((id) => builtInSound(id))
@@ -888,6 +893,14 @@ export function normalizeProject(raw: unknown): Project {
     if (player.width === 0.5) player.width = base.player.width;
     if (player.crouchHeight === 0.65) player.crouchHeight = base.player.crouchHeight;
     if (player.cameraDistance === 4.5) player.cameraDistance = base.player.cameraDistance;
+  }
+
+  // version 15: the pickups that the game objects are made of are in Models (an exported game has only what it uses)
+  if (rawVersion < 15 && r.exported !== true) {
+    const have = new Set(models.map((m) => m.id));
+    for (const kind of Object.keys(ITEM_MODEL_IDS) as ItemKind[]) {
+      if (!have.has(ITEM_MODEL_IDS[kind])) models.push(createItemModel(kind, newId));
+    }
   }
 
   // version 9: the characters of the prop set, and a gliding pose for the built-in humanoid. (The props, the

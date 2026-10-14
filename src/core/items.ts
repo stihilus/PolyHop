@@ -1,5 +1,6 @@
-// Models of the built-in pickups, drawn with the tiles of assets/textures/Items-16.png. They are made
-// the first time a Coin, Key, Apple, Checkpoint or Goal is added, and are ordinary models after that. Cubes only
+// Models of the built-in pickups, drawn with the tiles of assets/textures/Items-16.png. They are in every new
+// project's Models (and are made again when a game object is placed or edited and its model is gone), and are
+// ordinary models after that. Cubes only
 // (a coin is two thin cubes, one turned 45 degrees), as the Hytale modeling guide asks (see hytaleStyle.ts).
 
 import { type MeshData, boxMesh } from './mesh';

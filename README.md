@@ -134,7 +134,7 @@ The rules of a preset can also be put on any object with *Behavior > Make this a
 
 Pickups are ordinary models (`Items-16.png` atlas, a spinning animation), so they can be re-textured and
 re-animated in the Models and Animate tabs. A new project is blank: place a game object from Assets and it brings its
-model, its variables and its sounds with it.
+variables and its sounds with it (and its model, if it is not in Models).
 While playing, the HUD (top right) shows the variables marked *On screen*, with messages at the bottom.
 Objects taken away or moved during a run come back when you stop (the game plays a copy of the level).
 
@@ -206,22 +206,24 @@ other clip is yours to use. Edits show up the next time you press Play, no expor
 
 ### Built-in models (Models)
 
-A new project is **blank**: a flat ground and nothing else. Its **Models** (and Assets > Models) are the characters
-and nothing more: the two humanoids (male and female, with their skins, rig and animations), the **Slime** and the
-**Villager**. They are ordinary models: place them, re-texture them, change their cubes, animate them, or build a
-game object asset from one (*Assets > + New object… > Made of a model*).
+A new project is **blank**: a flat ground and nothing else. Its **Models** (and Assets > Models) hold only what the
+13 game objects are made of, so each of them can be opened and edited: the two humanoids (male and female, with their
+skins, rig and animations), the pickups (**Coin**, **Key**, **Apple**, **Flag**, **Trophy**), the **Slime** and the
+**Villager**. They are ordinary models, made of cubes: place them, re-texture them, change their cubes, animate
+them, or build a game object asset from one (*Assets > + New object… > Made of a model*). The other game objects
+(Door, Hazard, Exit, Moving platform, Sign, Water) are plain cube blocks, so their look is a block's tile, tint and
+shape.
 
-The pickups (**Coin**, **Key**, **Apple**, **Flag**, **Trophy**) are models too, but they are put in Models when
-you place their game object (Assets > Game objects), together with the variables and sounds it needs. The same goes
-for the Slime and the Villager if you delete them and place an Enemy or an NPC. Some come with animations (pick them
-in a placed instance's **Animation**): Slime `hop`, Villager `idle`, the pickups `spin`.
+If a game object's model is not in Models (you deleted it, or the project is an older one), placing the game object
+or pressing **Edit model** on it puts the built-in one back. Some come with animations (pick them in a placed
+instance's **Animation**): Slime `hop`, Villager `idle`, the pickups `spin`.
 
 Every texture stays: `Textures-16`, `Seamless-16`, `Props-16` (furniture, ore, plants, potions, gems ...),
 `Kit-16` (walls, roofs, bricks, water), `Items-16`, `Plants-16`, `Demo-16` (crystal, ruin stone, runes) and the
 character skins are atlases to paint blocks and shapes with. The tiles are there even though the models that used
 them are gone. `python3 tools/make-props.py`, `make-kit.py` and `make-demo.py` redraw the atlases; the characters
 are described in `src/core/props.ts` and `src/core/humanoid.ts`. Projects made before keep the models they have;
-older ones are not given the props, the kit or the demo models any more.
+older ones are not given the props, the kit or the demo models any more (the pickups are added once).
 
 The explorer skin (a green cap, a red scarf, a tunic and boots; `tools/make-humanoid.py`) is in every project: select
 the player > Skin. (The same outfit exists for the female character as `Character-Female-Explorer.png`.)
@@ -321,7 +323,7 @@ into the file too, so it looks the same on another machine.
 
 **Starting.** The editor always opens a **blank project** (the first time, and with **New project**): one level
 with a flat ground to stand on, the theme as the game's music and the 13 game objects (Assets > Game objects). Its
-Models are the two humanoids, the Slime and the Villager; everything else comes when you place it.
+Models are the two humanoids, the five pickups, the Slime and the Villager, and nothing else.
 
 The top bar shows the file name and `unsaved changes` when the project differs from the file. The
 project is also autosaved in the browser as a backup, which only matters if you forget to Save.

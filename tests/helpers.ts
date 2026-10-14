@@ -1,7 +1,7 @@
 // A project for the tests that need something to stand on and walk through: the default project (a blank one) with a
-// small test level in place of its empty one, and the pickup models and counters that level uses.
+// small test level in place of its empty one, and the counters that level uses.
 
-import { ITEMS_ATLAS, ITEM_MODEL_IDS, type ItemKind, TILE, createItemModel } from '../src/core/items';
+import { ITEMS_ATLAS, ITEM_MODEL_IDS, type ItemKind, TILE } from '../src/core/items';
 import { boxMesh, meshBounds, rockMesh, wedgeMesh } from '../src/core/mesh';
 import { type PresetKind, missingVariables, presetRules, presetVariables } from '../src/core/presets';
 import {
@@ -131,13 +131,6 @@ export function testLevel(): LevelObject[] {
 /** The default project with the test level (spawn 8 m back, looking at the stairs) as its only level. */
 export function createTestProject(): Project {
   const p = createDefaultProject();
-  p.models.push(
-    createItemModel('coin', newId),
-    createItemModel('key', newId),
-    createItemModel('apple', newId),
-    createItemModel('flag', newId),
-    createItemModel('trophy', newId),
-  );
   for (const kind of ['coin', 'key', 'apple'] as const) p.variables.push(...missingVariables(p.variables, presetVariables(kind), newId));
   p.levels = [createLevelData('Level 1', testLevel(), [0, 0.05, 8], 180)];
   return p;

@@ -106,9 +106,13 @@ describe('what is not in the set', () => {
 });
 
 describe('the characters in projects', () => {
-  it('a new project has them in its Models, next to the two humanoids and nothing else', () => {
+  it('a new project has them in its Models, next to the humanoids and the pickups', () => {
     const p = createDefaultProject();
-    expect(p.models.map((m) => m.id)).toEqual([HUMANOID_ID, HUMANOID_FEMALE_ID, 'prop-slime', 'prop-villager']);
+    const ids = p.models.map((m) => m.id);
+    expect(ids.slice(0, 2)).toEqual([HUMANOID_ID, HUMANOID_FEMALE_ID]);
+    expect(ids.slice(-2)).toEqual(['prop-slime', 'prop-villager']);
+    expect(ids.filter((id) => id.startsWith('item-'))).toHaveLength(5);
+    expect(ids).toHaveLength(9);
   });
 
   it('an older project gets them once and keeps what it deleted afterwards', () => {

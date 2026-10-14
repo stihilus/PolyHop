@@ -3,18 +3,17 @@ import { checkModel } from '../src/core/hytaleStyle';
 import { cubeWorldPoints } from '../src/core/humanoid';
 import { LEGACY_MODEL_HASHES } from '../src/core/legacyModels';
 import { geometryHash } from '../src/core/modelHash';
-import { ITEM_MODEL_IDS, type ItemKind, createItemModel } from '../src/core/items';
-import { PROJECT_VERSION, builtInModelById, createDefaultProject, newId, normalizeProject } from '../src/core/types';
+import { ITEM_MODEL_IDS } from '../src/core/items';
+import { PROJECT_VERSION, builtInModelById, createDefaultProject, normalizeProject } from '../src/core/types';
 import legacy from './fixtures/model-bounds-before-hytale.json';
 
 const project = createDefaultProject();
-// every model that is built in: the ones in a new project and the pickups, which come with their game objects
-const builtIn = [...project.models, ...(Object.keys(ITEM_MODEL_IDS) as ItemKind[]).map((k) => createItemModel(k, newId))];
+// every model that is built in: the ones of a new project
+const builtIn = project.models;
 
 describe('the built-in models follow the Hytale modeling guide', () => {
-  it('there are the two humanoids, the Slime and the Villager, and the five pickups', () => {
-    expect(project.models.map((m) => m.id)).toEqual(['humanoid', 'humanoid-female', 'prop-slime', 'prop-villager']);
-    expect(builtIn.map((m) => m.id).slice(4)).toEqual(Object.values(ITEM_MODEL_IDS));
+  it('there are the two humanoids, the five pickups, the Slime and the Villager', () => {
+    expect(project.models.map((m) => m.id)).toEqual(['humanoid', 'humanoid-female', ...Object.values(ITEM_MODEL_IDS), 'prop-slime', 'prop-villager']);
     for (const m of builtIn) expect(builtInModelById(m.id)?.id, m.id).toBe(m.id);
   });
 

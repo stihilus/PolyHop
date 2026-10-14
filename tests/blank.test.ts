@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { checkModel } from '../src/core/hytaleStyle';
 import { HUMANOID_FEMALE_ID, HUMANOID_ID } from '../src/core/humanoid';
 import { ITEM_MODEL_IDS } from '../src/core/items';
 import { PRESETS } from '../src/core/presets';
@@ -22,11 +23,42 @@ describe('a new project is blank', () => {
     expect(p.textures).toEqual([]);
   });
 
-  it('has only characters in its Models: the two humanoids, the Slime and the Villager', () => {
-    expect(p.models.map((m) => m.id)).toEqual([HUMANOID_ID, HUMANOID_FEMALE_ID, propModelId('slime'), propModelId('villager')]);
+  it('has in its Models only what the game objects are made of: the humanoids, the pickups, the Slime and the Villager', () => {
+    expect(p.models.map((m) => m.id)).toEqual([
+      HUMANOID_ID,
+      HUMANOID_FEMALE_ID,
+      ITEM_MODEL_IDS.coin,
+      ITEM_MODEL_IDS.key,
+      ITEM_MODEL_IDS.apple,
+      ITEM_MODEL_IDS.flag,
+      ITEM_MODEL_IDS.trophy,
+      propModelId('slime'),
+      propModelId('villager'),
+    ]);
     expect(p.player.modelId).toBe(HUMANOID_ID);
-    // no furniture, no plants, no building kit, no pickups
-    for (const m of p.models) expect(m.id.startsWith('kit-') || m.id.startsWith('item-') || m.id.startsWith('demo-')).toBe(false);
+    // no furniture, no plants, no building kit
+    for (const m of p.models) expect(m.id.startsWith('kit-') || m.id.startsWith('demo-') || m.id === propModelId('chest')).toBe(false);
+  });
+
+  it('every game object made of a model has that model in Models', () => {
+    const have = new Set(p.models.map((m) => m.id));
+    const used = p.prefabs.flatMap((x) => (x.object.kind === 'model' ? [x.object.modelId] : []));
+    expect(used).toHaveLength(7);
+    for (const id of used) expect(have.has(id), id).toBe(true);
+  });
+
+  it('every game object is made of cubes: a box block, or a model built of cubes', () => {
+    for (const prefab of p.prefabs) {
+      const o = prefab.object;
+      if (o.kind === 'block') {
+        expect(o.mesh.faces.length, prefab.name).toBe(6);
+        expect(o.mesh.verts.length, prefab.name).toBe(8);
+      } else {
+        const model = p.models.find((m) => m.id === o.modelId)!;
+        expect(model.cubes.length, prefab.name).toBeGreaterThan(0);
+        expect(checkModel(model).problems, prefab.name).toEqual([]);
+      }
+    }
   });
 
   it('keeps every sound, the main theme included, and plays the theme', () => {
@@ -40,14 +72,15 @@ describe('a new project is blank', () => {
     expect(p.prefabs.map((x) => x.base).sort()).toEqual(PRESETS.map((x) => x.kind).sort());
   });
 
-  it('a game object brings its variables and its model when it is placed', () => {
+  it('a game object brings its variables and its model when it is placed, if the model was deleted', () => {
     for (const { kind } of PRESETS) {
       const copy = createDefaultProject();
+      copy.models = copy.models.filter((m) => !m.id.startsWith('item-') && !m.id.startsWith('prop-'));
       const modelId = ensurePresetAssets(copy, kind);
       if (modelId) expect(copy.models.some((m) => m.id === modelId), kind).toBe(true);
     }
     const coin = createDefaultProject();
-    expect(coin.models.some((m) => m.id === ITEM_MODEL_IDS.coin)).toBe(false);
+    coin.models = coin.models.filter((m) => m.id !== ITEM_MODEL_IDS.coin);
     expect(ensurePresetAssets(coin, 'coin')).toBe(ITEM_MODEL_IDS.coin);
     expect(coin.models.some((m) => m.id === ITEM_MODEL_IDS.coin)).toBe(true);
     expect(coin.variables.map((v) => v.name)).toEqual(['coins']);
@@ -77,8 +110,26 @@ describe('a new project is blank', () => {
 
   it('an empty file opens as the blank project too', () => {
     expect(normalizeProject(null).levels[0]!.objects.map((o) => o.name)).toEqual(['Ground']);
-    // and a file from the first versions gets the characters, not the props that used to be added
+    // and a file from the first versions gets the same models as a new project, not the props that used to be added
     expect(normalizeProject({}).models.map((m) => m.id).sort()).toEqual(p.models.map((m) => m.id).sort());
+  });
+});
+
+describe('older projects', () => {
+  it('a project saved before the pickups were in Models gets them once', () => {
+    const old = normalizeProject({ version: 14, models: [], levels: [{ name: 'A', objects: [] }] });
+    for (const id of Object.values(ITEM_MODEL_IDS)) expect(old.models.some((m) => m.id === id), id).toBe(true);
+    // saved at the current version, a deleted pickup stays deleted
+    const pruned = JSON.parse(JSON.stringify(old));
+    pruned.models = pruned.models.filter((m: { id: string }) => m.id !== ITEM_MODEL_IDS.coin);
+    const back = normalizeProject(pruned);
+    expect(back.models.some((m) => m.id === ITEM_MODEL_IDS.coin)).toBe(false);
+    expect(back.models.some((m) => m.id === ITEM_MODEL_IDS.key)).toBe(true);
+  });
+
+  it('an exported game keeps only what it uses', () => {
+    const game = normalizeProject({ version: 14, exported: true, models: [], levels: [{ name: 'A', objects: [] }] });
+    expect(game.models.some((m) => m.id.startsWith('item-'))).toBe(false);
   });
 });
 

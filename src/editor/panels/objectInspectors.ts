@@ -168,10 +168,7 @@ export function buildModelInstanceInspector(host: PanelHost, obj: LevelModelInst
       el('button', {
         class: 'btn',
         text: 'Edit model',
-        onclick: () => {
-          host.setMode('model');
-          host.modelEditor.open(obj.modelId);
-        },
+        onclick: () => host.openModel(obj.modelId),
       }),
     ),
     host.behaviorEditor(obj, (kind) => host.applyPreset(obj, kind)),

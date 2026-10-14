@@ -33,6 +33,8 @@ export interface PanelHost {
   applyPreset(obj: LevelObject, kind: PresetKind): void;
   setMode(mode: Mode): void;
   setLeftTab(tab: LeftTab): void;
+  /** Open a model in the Models tab (a built-in one that the project lacks is added first). */
+  openModel(modelId: string): void;
   openAnimation(modelId: string | null): void;
   /** Select a model or a game object in the Assets panel. */
   selectAsset(sel: { model?: string; prefab?: string } | null): void;
