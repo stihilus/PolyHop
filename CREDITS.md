@@ -25,3 +25,8 @@ attribute for them.
 
 `assets/textures/Textures-16.png` and `assets/textures/Seamless-16.png` are 16 × 16 px tile sets supplied by the
 project author.
+
+## License of PolyHop itself
+
+PolyHop is released under the MIT License, see `LICENSE`. The font above is under the SIL Open Font License, the
+libraries in the first table under their own licenses.

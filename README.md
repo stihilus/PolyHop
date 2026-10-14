@@ -606,3 +606,13 @@ sound for the player's footsteps by surface.
   fine as props.
 - Third-person camera, keyboard + mouse and gamepad. English UI.
 - Built-in sfxr-style sound generator, plus import.
+
+## License
+
+PolyHop is open source under the **MIT License** (see [LICENSE](LICENSE)): anyone may use, copy, change, publish and
+sell it, with or without changes, for any purpose, as long as the copyright notice and the license text come along.
+This covers the code, the tools and the art made for PolyHop (the models, the skins, the atlases and the sounds).
+Games made with the editor and exported from it are yours; PolyHop puts no condition on them.
+
+The typeface **Inter** keeps its own license (SIL Open Font License 1.1, `assets/fonts/OFL.txt`), and the libraries
+PolyHop is built on keep theirs (see [CREDITS.md](CREDITS.md)).
