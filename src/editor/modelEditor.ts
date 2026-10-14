@@ -197,11 +197,20 @@ export class ModelEditor {
       // loop cut and add vertex are clicks; every other tool can drag a selection rectangle
       const clicks = this.bar.tool === 'loopcut' || this.bar.tool === 'addvertex';
       this.marquee = clicks || this.previewName !== null ? null : { x: e.clientX, y: e.clientY, active: false };
+      // the pointer stays with the view while the rectangle is dragged, also over the toolbars on top of it
+      if (this.marquee) this.canvas.setPointerCapture?.(e.pointerId);
     });
     this.canvas.addEventListener('pointerup', (e) => this.onPointerUp(e));
+    this.canvas.addEventListener('pointercancel', () => {
+      this.downAt = null;
+      this.endMarquee();
+    });
     this.canvas.addEventListener('pointermove', (e) => {
-      if (e.buttons === 0) this.edit.pointerMove(e);
-      else if (this.marquee && (e.buttons & 1) === 1) this.dragMarquee(e);
+      if (e.buttons === 0) {
+        // the button came up somewhere the view did not see: the rectangle is over
+        if (this.marquee) this.endMarquee();
+        this.edit.pointerMove(e);
+      } else if (this.marquee && (e.buttons & 1) === 1) this.dragMarquee(e);
     });
     this.canvas.addEventListener('pointerleave', () => this.edit.clearPreview());
     window.addEventListener('keydown', (e) => this.onKey(e));
@@ -723,16 +732,34 @@ export class ModelEditor {
     this.refreshTarget();
     this.updateVertexFields();
     this.uvView?.redraw();
-    if (this.uvHeading && this.cube) this.uvHeading.textContent = `UV · ${this.faceLabel(this.cube, this.primaryFace())}`;
+    if (this.uvHeading && this.cube) this.uvHeading.textContent = this.uvHeadingText(this.cube);
     this.focusUv();
   }
 
-  /** Zoom the UV view onto the selected face (after the layout has settled). */
+  /** The faces the UV panel works on: all the selected ones, or the one it shows when none is selected in the view. */
+  private selectedFaces(): number[] {
+    const cube = this.cube;
+    if (!cube) return [];
+    const last = cube.mesh.faces.length - 1;
+    const picked = [...new Set(this.edit.faces)].filter((f) => f >= 0 && f <= last);
+    return picked.length > 0 ? picked : [this.primaryFace()];
+  }
+
+  private uvHeadingText(cube: ModelCube): string {
+    const faces = this.selectedFaces();
+    return faces.length > 1 ? `UV · ${faces.length} faces` : `UV · ${this.faceLabel(cube, this.primaryFace())}`;
+  }
+
+  /** Zoom the UV view onto the selected face, or onto all the selected faces (after the layout has settled). */
   private focusUv(): void {
     requestAnimationFrame(() => {
       const cube = this.cube;
-      const face = cube?.mesh.faces[this.primaryFace()];
-      if (face) this.uvView?.focus(face.uv);
+      if (!cube) return;
+      const uvs = this.selectedFaces().flatMap((f) => {
+        const face = cube.mesh.faces[f];
+        return face ? [face.uv] : [];
+      });
+      if (uvs.length > 0) this.uvView?.focus(uvs);
     });
   }
 
@@ -756,24 +783,25 @@ export class ModelEditor {
     const cube = this.cube;
     const info = this.texInfo();
     if (!cube || !info) return;
-    const fi = this.primaryFace();
-    const b = uvBounds(cube.mesh.faces[fi]!.uv);
-    // one tile per meter: the face's real size in meters x tile size, anchored where it is now
-    const { width, height } = planarCoords(cube.mesh, fi);
-    const w = Math.max(1, Math.round(width * info.tileSize));
-    const h = Math.max(1, Math.round(height * info.tileSize));
-    const x = Math.min(Math.max(0, b.minX), Math.max(0, info.width - w));
-    const y = Math.min(Math.max(0, b.minY), Math.max(0, info.height - h));
-    this.setFaceUv(cube, fi, uvFromRect(cube.mesh, fi, { x, y, w, h }));
+    for (const fi of this.selectedFaces()) {
+      const b = uvBounds(cube.mesh.faces[fi]!.uv);
+      // one tile per meter: the face's real size in meters x tile size, anchored where it is now
+      const { width, height } = planarCoords(cube.mesh, fi);
+      const w = Math.max(1, Math.round(width * info.tileSize));
+      const h = Math.max(1, Math.round(height * info.tileSize));
+      const x = Math.min(Math.max(0, b.minX), Math.max(0, info.width - w));
+      const y = Math.min(Math.max(0, b.minY), Math.max(0, info.height - h));
+      this.setFaceUv(cube, fi, uvFromRect(cube.mesh, fi, { x, y, w, h }));
+    }
     this.uvsChanged('uv-reset');
     this.afterUvEdit();
   }
 
-  private transformPrimaryFace(fn: (uv: UVPoly) => UVPoly, label: string): void {
+  /** Rotate / flip the UV of every selected face (each in place). */
+  private transformSelectedFaces(fn: (uv: UVPoly) => UVPoly, label: string): void {
     const cube = this.cube;
     if (!cube) return;
-    const fi = this.primaryFace();
-    this.setFaceUv(cube, fi, fn(cube.mesh.faces[fi]!.uv));
+    for (const fi of this.selectedFaces()) this.setFaceUv(cube, fi, fn(cube.mesh.faces[fi]!.uv));
     this.uvsChanged(label);
     this.afterUvEdit();
   }
@@ -797,16 +825,17 @@ export class ModelEditor {
     this.uvView?.redraw();
   }
 
+  /** The faces of the shape in the UV view: the selected ones are dragged together, the main one has handles. */
   private layers(): AtlasLayer[] {
     const cube = this.cube;
     if (!cube) return [];
     const primary = this.primaryFace();
-    const picked = new Set(this.edit.faces);
+    const picked = new Set(this.selectedFaces());
     return cube.mesh.faces.map((f, i) => ({
       id: `${cube.id}:${i}`,
       uv: f.uv,
-      kind: i === primary ? ('selected' as const) : ('sibling' as const),
-      label: picked.has(i) ? '●' : undefined,
+      kind: picked.has(i) ? ('selected' as const) : ('sibling' as const),
+      primary: i === primary,
     }));
   }
 
@@ -841,11 +870,23 @@ export class ModelEditor {
         this.updateVertexFields();
       },
       onUvCommit: () => this.uvsChanged('uv-edit'),
-      onLayerPick: (layer) => {
+      onLayerPick: (layer, mode) => {
         const t = this.parseLayer(layer);
         if (!t) return;
-        this.edit.faces = [t.face];
-        this.lastFace = t.face;
+        const current = this.selectedFaces();
+        if (mode === 'toggle') {
+          // Shift / Ctrl+click: add the face, or take it out (the last one stays)
+          const on = current.includes(t.face);
+          this.edit.faces = on ? (current.length > 1 ? current.filter((f) => f !== t.face) : current) : [...current, t.face];
+          this.lastFace = this.edit.faces[this.edit.faces.length - 1] ?? t.face;
+        } else if (mode === 'primary') {
+          // a click on one of several selected faces: it becomes the one with the point handles
+          this.edit.faces = [...current.filter((f) => f !== t.face), t.face];
+          this.lastFace = t.face;
+        } else {
+          this.edit.faces = [t.face];
+          this.lastFace = t.face;
+        }
         this.onSelectionChanged();
       },
       onTilePick: (col, row, shift) => {
@@ -1247,8 +1288,7 @@ export class ModelEditor {
 
     // ---- uv of the selected face
     const info = this.texInfo();
-    const face = this.primaryFace();
-    this.uvHeading = el('div', { class: 'section-title', text: `UV · ${this.faceLabel(cube, face)}` });
+    this.uvHeading = el('div', { class: 'section-title', text: this.uvHeadingText(cube) });
     this.inspectorEl.append(this.uvHeading);
     if (!info) {
       this.inspectorEl.append(el('div', { class: 'empty', text: 'Choose a texture above to edit UVs.' }));
@@ -1270,7 +1310,7 @@ export class ModelEditor {
       return b;
     };
     seg.append(
-      modeBtn('Move points', false, 'Drag the corner points or the whole face over the texture'),
+      modeBtn('Move points', false, 'Drag the corner points, or a face over the texture (all selected faces move together)'),
       modeBtn('Pick tile', true, 'Click a tile to map the selected face(s) to it (Shift = all faces)'),
     );
     const snap = el('select', { title: 'Point snapping' });
@@ -1293,9 +1333,9 @@ export class ModelEditor {
       el(
         'div',
         { class: 'button-stack row wrap' },
-        el('button', { class: 'btn', text: 'Rotate', onclick: () => this.transformPrimaryFace(rotateUvCW, 'uv-rotate') }),
-        el('button', { class: 'btn', text: 'Flip H', onclick: () => this.transformPrimaryFace(flipUvH, 'uv-flip') }),
-        el('button', { class: 'btn', text: 'Flip V', onclick: () => this.transformPrimaryFace(flipUvV, 'uv-flip') }),
+        el('button', { class: 'btn', text: 'Rotate', onclick: () => this.transformSelectedFaces(rotateUvCW, 'uv-rotate') }),
+        el('button', { class: 'btn', text: 'Flip H', onclick: () => this.transformSelectedFaces(flipUvH, 'uv-flip') }),
+        el('button', { class: 'btn', text: 'Flip V', onclick: () => this.transformSelectedFaces(flipUvV, 'uv-flip') }),
         el('button', {
           class: 'btn',
           text: 'Reset size',

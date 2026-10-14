@@ -12,6 +12,8 @@ import {
   normalizeProject,
 } from '../src/core/types';
 import {
+  type UVPoly,
+  clampGroupMove,
   flipUvH,
   flipUvV,
   pointInPoly,
@@ -321,5 +323,40 @@ describe('model instances', () => {
     const [b] = modelInstanceColliders(model, { ...base, scale: [2, 2, 2] });
     expect(b!.maxX - b!.minX).toBeCloseTo(4);
     expect(b!.maxY).toBeCloseTo(2);
+  });
+});
+
+describe('moving several UV quads together', () => {
+  const quad = (x: number, y: number, w = 4, h = 4): UVPoly => [
+    [x, y],
+    [x + w, y],
+    [x + w, y + h],
+    [x, y + h],
+  ];
+
+  it('moves the whole group by the same step, and stops when the first of them reaches the edge', () => {
+    const group = [quad(2, 2), quad(10, 6)];
+    expect(clampGroupMove(group, 3, 1, 64, 64)).toEqual([3, 1]);
+    // the left quad reaches x = 0 first: the right one stops short of where it could go
+    expect(clampGroupMove(group, -5, 0, 64, 64)).toEqual([-2, 0]);
+    // the right quad reaches the right edge first (x = 14 + dx <= 64)
+    expect(clampGroupMove(group, 100, 0, 64, 64)).toEqual([50, 0]);
+    expect(clampGroupMove(group, 0, -9, 64, 64)).toEqual([0, -2]);
+    expect(clampGroupMove(group, 0, 100, 64, 32)).toEqual([0, 22]);
+  });
+
+  it('a single quad, and an empty group', () => {
+    expect(clampGroupMove([quad(0, 0)], -3, -3, 16, 16)).toEqual([0, 0]);
+    expect(clampGroupMove([], 5, 5, 16, 16)).toEqual([5, 5]);
+  });
+
+  it('keeps the quads where they are relative to each other', () => {
+    const group = [quad(2, 2), quad(10, 6)];
+    const [dx, dy] = clampGroupMove(group, -8, -8, 64, 64);
+    const moved = group.map((uv) => translateUv(uv, dx, dy));
+    expect(moved[1]![0]![0]! - moved[0]![0]![0]!).toBe(8);
+    expect(moved[1]![0]![1]! - moved[0]![0]![1]!).toBe(4);
+    expect(Math.min(...moved.flat().map((p) => p[0]))).toBe(0);
+    expect(Math.min(...moved.flat().map((p) => p[1]))).toBe(0);
   });
 });

@@ -600,6 +600,11 @@ carries the file along.
   rectangle** over the view to select many: in Vertex mode every point of the shape inside it (also the ones behind,
   as the handles are drawn through the shape), in Face mode every face whose center is inside; Shift / Ctrl / Cmd adds to
   what is selected. **Esc**, or a click beside the model, deselects everything (points, faces and the shape).
+- **Several faces at once in the UV map:** select faces in the view (a rectangle in Face mode, or Shift+click) or in the
+  UV map itself (Shift / Ctrl+click on another face's quad adds it or takes it out). All selected faces are drawn
+  highlighted there and **dragging any of them moves them all together** (one undo step; the group stops at the edge of
+  the texture as a whole). The corner handles belong to the main face (the one picked last; click another selected
+  face to make it the main one). *Rotate*, *Flip H / V*, *Reset size* and *Pick tile* work on every selected face.
 - **Paint** edits the *whole* atlas. Every model and level block using it updates live.
 - Built-in atlases (`assets/textures`): `Textures-16.png` (the main one, used by the ground of a new level),
   `Seamless-16.png` (192 seamless 16 × 16 tiles), and the special ones: `Items-16.png` (pickups),

@@ -1,14 +1,22 @@
-import { type UVPoly, pointInPoly, translateUv } from '../../core/uv';
+import { type UVPoly, clampGroupMove, pointInPoly, translateUv } from '../../core/uv';
 import { el } from './dom';
 import { UI_FONT_STACK } from '../../core/fonts';
 
 export interface AtlasLayer {
   id: string;
   uv: UVPoly;
-  /** selected = editable (handles), sibling = other faces of the same cube, other = rest of the model */
+  /** selected = editable (dragged together), sibling = other faces of the same cube, other = rest of the model */
   kind: 'selected' | 'sibling' | 'other';
   label?: string;
+  /**
+   * Of several selected layers, the one whose corner points have handles (the face the number fields edit). When no
+   * selected layer says so, every selected layer has handles.
+   */
+  primary?: boolean;
 }
+
+/** What a click on a face's quad in the view asks for: replace the selection, add / take it out, or make it the main face. */
+export type LayerPickMode = 'replace' | 'toggle' | 'primary';
 
 export interface AtlasTexture {
   /** Changes when the texture or its size changes; the view re-fits on change. */
@@ -31,7 +39,7 @@ export interface AtlasViewOptions {
   onVertexSet?: (layer: AtlasLayer, vertex: number, x: number, y: number) => void;
   onFaceSet?: (layer: AtlasLayer, uv: UVPoly) => void;
   onUvCommit?: () => void;
-  onLayerPick?: (layer: AtlasLayer) => void;
+  onLayerPick?: (layer: AtlasLayer, mode: LayerPickMode) => void;
   onTilePick?: (col: number, row: number, shift: boolean) => void;
   onPaint?: (phase: 'down' | 'move' | 'up', x: number, y: number, e: PointerEvent) => void;
   onHover?: (x: number | null, y: number | null) => void;
@@ -42,7 +50,20 @@ export interface AtlasViewOptions {
 type Drag =
   | { type: 'pan'; sx: number; sy: number; px: number; py: number }
   | { type: 'vertex'; layer: AtlasLayer; vertex: number }
-  | { type: 'face'; layer: AtlasLayer; startX: number; startY: number; orig: UVPoly }
+  | {
+      type: 'faces';
+      /** The selected faces that move together. */
+      layers: AtlasLayer[];
+      orig: UVPoly[];
+      /** The face the pointer went down on. */
+      under: AtlasLayer;
+      startX: number;
+      startY: number;
+      clientX: number;
+      clientY: number;
+      shift: boolean;
+      moved: boolean;
+    }
   | { type: 'paint' }
   | { type: 'tile'; sx: number; sy: number; shift: boolean };
 
@@ -137,12 +158,13 @@ export class AtlasView {
     this.measure();
   }
 
-  /** Zoom and center on a UV quad (about 40% of the view) so a small face is easy to work on. */
-  focus(uv: UVPoly): void {
+  /** Zoom and center on a UV quad, or on a group of them (about 40% of the view) so a small face is easy to work on. */
+  focus(uvs: UVPoly | UVPoly[]): void {
     const tex = this.opts.texture();
     if (!tex || !this.measure()) return;
-    const xs = uv.map((p) => p[0]);
-    const ys = uv.map((p) => p[1]);
+    const points = Array.isArray(uvs[0]![0]) ? (uvs as UVPoly[]).flat() : (uvs as UVPoly);
+    const xs = points.map((p) => p[0]);
+    const ys = points.map((p) => p[1]);
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
@@ -272,6 +294,13 @@ export class AtlasView {
     this.status.textContent = `${tex.width}×${tex.height} px · ${Math.round(this.zoom * 100)}% · pixel ${px}`;
   }
 
+  /** Do the corner points of this selected layer have handles? (Only the main face of a group does.) */
+  private hasHandles(layer: AtlasLayer): boolean {
+    if (layer.kind !== 'selected') return false;
+    if (layer.primary) return true;
+    return !this.opts.layers().some((l) => l.kind === 'selected' && l.primary);
+  }
+
   private drawLayer(ctx: CanvasRenderingContext2D, layer: AtlasLayer): void {
     const pts = layer.uv.map(([x, y]) => this.toScreen(x, y));
     ctx.beginPath();
@@ -284,7 +313,7 @@ export class AtlasView {
       ctx.strokeStyle = '#ffb23e';
       ctx.lineWidth = 2;
       ctx.stroke();
-      if (this.opts.mode === 'uv') {
+      if (this.opts.mode === 'uv' && this.hasHandles(layer)) {
         ctx.lineWidth = 1;
         pts.forEach((p, i) => {
           ctx.fillStyle = '#14161b';
@@ -361,6 +390,7 @@ export class AtlasView {
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     for (const layer of selected) {
+      if (!this.hasHandles(layer)) continue;
       for (let i = 0; i < layer.uv.length; i++) {
         const [sx, sy] = this.toScreen(layer.uv[i]![0], layer.uv[i]![1]);
         if (Math.hypot(sx - mx, sy - my) <= HANDLE_RADIUS) {
@@ -370,16 +400,27 @@ export class AtlasView {
         }
       }
     }
-    for (const layer of selected) {
-      if (pointInPoly(tx, ty, layer.uv)) {
-        this.canvas.setPointerCapture(e.pointerId);
-        this.drag = { type: 'face', layer, startX: tx, startY: ty, orig: layer.uv.map((p) => [...p]) as UVPoly };
-        return;
-      }
+    // inside any selected face: all the selected faces move together
+    const under = [...selected].reverse().find((l) => pointInPoly(tx, ty, l.uv));
+    if (under) {
+      this.canvas.setPointerCapture(e.pointerId);
+      this.drag = {
+        type: 'faces',
+        layers: selected,
+        orig: selected.map((l) => l.uv.map((p) => [...p]) as UVPoly),
+        under,
+        startX: tx,
+        startY: ty,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        shift: e.shiftKey || e.ctrlKey || e.metaKey,
+        moved: false,
+      };
+      return;
     }
-    // click on another face's quad selects that face
+    // click on another face's quad selects that face (Shift adds it to the selection)
     const hit = [...layers].reverse().find((l) => l.kind !== 'selected' && pointInPoly(tx, ty, l.uv));
-    if (hit) this.opts.onLayerPick?.(hit);
+    if (hit) this.opts.onLayerPick?.(hit, e.shiftKey || e.ctrlKey || e.metaKey ? 'toggle' : 'replace');
   }
 
   private onMove(e: PointerEvent): void {
@@ -401,22 +442,15 @@ export class AtlasView {
         this.opts.onVertexSet?.(d.layer, d.vertex, x, y);
         break;
       }
-      case 'face': {
-        const dx = this.snapValue(tx - d.startX);
-        const dy = this.snapValue(ty - d.startY);
+      case 'faces': {
+        if (!d.moved && Math.hypot(e.clientX - d.clientX, e.clientY - d.clientY) < 3) break;
+        d.moved = true;
+        let dx = this.snapValue(tx - d.startX);
+        let dy = this.snapValue(ty - d.startY);
         const tex = this.opts.texture();
-        let moved = translateUv(d.orig, dx, dy);
-        if (tex) {
-          // keep the whole face inside the texture
-          const minX = Math.min(...moved.map((p) => p[0]));
-          const maxX = Math.max(...moved.map((p) => p[0]));
-          const minY = Math.min(...moved.map((p) => p[1]));
-          const maxY = Math.max(...moved.map((p) => p[1]));
-          const fx = minX < 0 ? -minX : maxX > tex.width ? tex.width - maxX : 0;
-          const fy = minY < 0 ? -minY : maxY > tex.height ? tex.height - maxY : 0;
-          if (fx || fy) moved = translateUv(moved, fx, fy);
-        }
-        this.opts.onFaceSet?.(d.layer, moved);
+        // the group moves as one: keep the whole of it inside the texture
+        if (tex) [dx, dy] = clampGroupMove(d.orig, dx, dy, tex.width, tex.height);
+        d.layers.forEach((layer, i) => this.opts.onFaceSet?.(layer, translateUv(d.orig[i]!, dx, dy)));
         break;
       }
       case 'paint':
@@ -433,8 +467,12 @@ export class AtlasView {
     const d = this.drag;
     this.drag = null;
     if (!d) return;
-    if (d.type === 'vertex' || d.type === 'face') this.opts.onUvCommit?.();
-    else if (d.type === 'paint') {
+    if (d.type === 'vertex') this.opts.onUvCommit?.();
+    else if (d.type === 'faces') {
+      if (d.moved) this.opts.onUvCommit?.();
+      else if (d.shift) this.opts.onLayerPick?.(d.under, 'toggle');
+      else if (d.layers.length > 1 && !d.under.primary) this.opts.onLayerPick?.(d.under, 'primary');
+    } else if (d.type === 'paint') {
       const [tx, ty] = this.toTex(e.clientX, e.clientY);
       this.opts.onPaint?.('up', Math.floor(tx), Math.floor(ty), e);
     } else if (d.type === 'tile') {

@@ -67,6 +67,29 @@ export function translateUv(uv: UVPoly, dx: number, dy: number): UVPoly {
   return uv.map((p) => [p[0] + dx, p[1] + dy] as UV);
 }
 
+/**
+ * The move (dx, dy) of a group of UV quads, cut back so that none of them leaves the texture: the group keeps its
+ * shape, it only stops at the edge as a whole.
+ */
+export function clampGroupMove(uvs: readonly UVPoly[], dx: number, dy: number, w: number, h: number): [number, number] {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const uv of uvs) {
+    for (const p of uv) {
+      minX = Math.min(minX, p[0]);
+      maxX = Math.max(maxX, p[0]);
+      minY = Math.min(minY, p[1]);
+      maxY = Math.max(maxY, p[1]);
+    }
+  }
+  if (!Number.isFinite(minX)) return [dx, dy];
+  const fx = minX + dx < 0 ? 0 - minX : maxX + dx > w ? w - maxX : dx;
+  const fy = minY + dy < 0 ? 0 - minY : maxY + dy > h ? h - maxY : dy;
+  return [fx, fy];
+}
+
 export function clampUv(uv: UVPoly, w: number, h: number): UVPoly {
   return uv.map((p) => [Math.min(w, Math.max(0, p[0])), Math.min(h, Math.max(0, p[1]))] as UV);
 }
