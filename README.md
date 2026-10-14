@@ -596,6 +596,10 @@ carries the file along.
 - **Models** panel: click a face in the 3D view. Its UV quad shows up over the texture (zoomed onto
   it); drag the four corner points or the whole quad. "Pick tile" maps the face to a clicked tile
   (Shift = all faces). Rotate / flip / reset size / copy to all faces.
+- **Selecting in Models:** click a shape, a face (Face mode, key 2) or a point (Vertex mode, key 3), Shift adds. **Drag a
+  rectangle** over the view to select many: in Vertex mode every point of the shape inside it (also the ones behind,
+  as the handles are drawn through the shape), in Face mode every face whose center is inside; Shift / Ctrl / Cmd adds to
+  what is selected. **Esc**, or a click beside the model, deselects everything (points, faces and the shape).
 - **Paint** edits the *whole* atlas. Every model and level block using it updates live.
 - Built-in atlases (`assets/textures`): `Textures-16.png` (the main one, used by the ground of a new level),
   `Seamless-16.png` (192 seamless 16 × 16 tiles), and the special ones: `Items-16.png` (pickups),

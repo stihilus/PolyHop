@@ -342,6 +342,14 @@ input[type='range'] {
   position: absolute;
   inset: 0;
 }
+.marquee-box {
+  position: absolute;
+  display: none;
+  z-index: 5;
+  border: 1px dashed #ffd34d;
+  background: rgba(255, 211, 77, 0.12);
+  pointer-events: none;
+}
 .viewport-canvas {
   display: block;
   width: 100%;

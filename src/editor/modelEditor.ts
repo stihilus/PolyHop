@@ -40,6 +40,7 @@ import { renameInline } from './ui/rename';
 import { makeSplitter } from './ui/splitter';
 import { TransformBar } from './ui/transformBar';
 import { appConfirm } from './ui/dialogs';
+import { facesInMarquee, marqueeOf, mergeSelection, verticesInMarquee } from './boxSelect';
 import { AxisGizmo, buildViewMenu } from './ui/viewControls';
 
 const SNAP_OPTIONS = [
@@ -65,6 +66,9 @@ interface HistoryStep {
   before: string;
   after: string;
 }
+
+/** How far (px) the pointer has to move before a click becomes a dragged rectangle. */
+const MARQUEE_TOLERANCE = 4;
 
 export class ModelEditor {
   readonly root: HTMLElement;
@@ -119,6 +123,9 @@ export class ModelEditor {
   private posView: { name: string; position: Vec3; rotation: Vec3; size: Vec3 } | null = null;
   private uvHeading: HTMLElement | null = null;
   private downAt: { x: number; y: number } | null = null;
+  /** The rectangle being dragged over the view (client pixels), once the pointer moved far enough. */
+  private marquee: { x: number; y: number; active: boolean } | null = null;
+  private marqueeEl = el('div', { class: 'marquee-box' });
 
   private undoStack: HistoryStep[] = [];
   private redoStack: HistoryStep[] = [];
@@ -179,16 +186,22 @@ export class ModelEditor {
     this.root.classList.add('hidden');
     this.onBarChanged();
 
+    this.viewportEl.append(this.marqueeEl);
     this.canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || e.altKey || this.gizmo.hovering || this.gizmo.dragging) {
         this.downAt = null;
+        this.endMarquee();
         return;
       }
       this.downAt = { x: e.clientX, y: e.clientY };
+      // loop cut and add vertex are clicks; every other tool can drag a selection rectangle
+      const clicks = this.bar.tool === 'loopcut' || this.bar.tool === 'addvertex';
+      this.marquee = clicks || this.previewName !== null ? null : { x: e.clientX, y: e.clientY, active: false };
     });
     this.canvas.addEventListener('pointerup', (e) => this.onPointerUp(e));
     this.canvas.addEventListener('pointermove', (e) => {
       if (e.buttons === 0) this.edit.pointerMove(e);
+      else if (this.marquee && (e.buttons & 1) === 1) this.dragMarquee(e);
     });
     this.canvas.addEventListener('pointerleave', () => this.edit.clearPreview());
     window.addEventListener('keydown', (e) => this.onKey(e));
@@ -473,8 +486,8 @@ export class ModelEditor {
     else if (tool === 'addvertex') text = 'Add vertex: click an edge to split it, then move the new point.';
     else if (tool === 'select') text = 'Click a face to select it.';
     else if (sub === 'object') text = 'Drag the gizmo to move / rotate / scale the shape. Click a face to pick it for UV editing.';
-    else if (sub === 'face') text = 'Click a face (Shift = more), drag the gizmo, or use Extrude / Inset.';
-    else text = 'Click a point (Shift = several), then drag the gizmo to move it.';
+    else if (sub === 'face') text = 'Click a face (Shift = more) or drag a rectangle over several, then drag the gizmo or use Extrude / Inset. Esc deselects.';
+    else text = 'Click a point (Shift = several) or drag a rectangle over many, then drag the gizmo to move them. Esc deselects.';
     this.hintEl.textContent = text + nav;
   }
 
@@ -864,10 +877,83 @@ export class ModelEditor {
     return { cube, face: ref.face, point: [hit.point.x, hit.point.y, hit.point.z] };
   }
 
+  /** Grow the selection rectangle while the left button is dragged over the view. */
+  private dragMarquee(e: PointerEvent): void {
+    const m = this.marquee;
+    if (!m) return;
+    if (!m.active && Math.hypot(e.clientX - m.x, e.clientY - m.y) <= MARQUEE_TOLERANCE) return;
+    m.active = true;
+    const box = this.viewportEl.getBoundingClientRect();
+    const r = marqueeOf(m.x, m.y, e.clientX, e.clientY);
+    Object.assign(this.marqueeEl.style, {
+      display: 'block',
+      left: `${r.x0 - box.left}px`,
+      top: `${r.y0 - box.top}px`,
+      width: `${r.x1 - r.x0}px`,
+      height: `${r.y1 - r.y0}px`,
+    });
+  }
+
+  private endMarquee(): void {
+    this.marquee = null;
+    this.marqueeEl.style.display = 'none';
+  }
+
+  /**
+   * The rectangle was let go: in Vertex mode the points of the shape inside it are selected, in Face mode the faces
+   * (Shift / Ctrl / Cmd adds to the selection). Shapes are edited one at a time, so Object mode has no box select.
+   */
+  private applyMarquee(down: { x: number; y: number }, e: PointerEvent): void {
+    const cube = this.cube;
+    const sub = this.bar.sub;
+    if (!cube || (sub !== 'vertex' && sub !== 'face')) {
+      this.showNotice(
+        cube
+          ? 'Box select picks points in Vertex mode (3) and faces in Face mode (2).'
+          : 'Select a shape first, then drag a rectangle over its points (Vertex mode) or faces (Face mode).',
+      );
+      return;
+    }
+    const extend = e.shiftKey || e.ctrlKey || e.metaKey;
+    const rect = this.canvas.getBoundingClientRect();
+    const box = marqueeOf(down.x, down.y, e.clientX, e.clientY);
+    if (sub === 'vertex') {
+      this.edit.vertices = mergeSelection(this.edit.vertices, verticesInMarquee(cube, this.camera, rect, box), extend);
+    } else {
+      this.edit.faces = mergeSelection(this.edit.faces, facesInMarquee(cube, this.camera, rect, box), extend);
+      const last = this.edit.faces[this.edit.faces.length - 1];
+      if (last !== undefined) this.lastFace = last;
+    }
+    this.onSelectionChanged();
+  }
+
+  /**
+   * Esc, or a click beside the model: nothing stays selected (the points, the faces and the shape). Returns whether
+   * there was something to deselect.
+   */
+  private deselectAll(): boolean {
+    if (!this.model) return false;
+    const had = this.selectedCubeId !== null || this.edit.faces.length > 0 || this.edit.vertices.length > 0;
+    if (!had) return false;
+    this.selectedCubeId = null;
+    this.edit.clearSelection();
+    this.lastFace = 0;
+    this.refreshCubeList();
+    this.refreshInspector();
+    this.onSelectionChanged();
+    return true;
+  }
+
   private onPointerUp(e: PointerEvent): void {
     const down = this.downAt;
+    const marquee = this.marquee;
     this.downAt = null;
+    this.endMarquee();
     if (e.button !== 0 || !down || !this.model) return;
+    if (marquee?.active) {
+      this.applyMarquee(down, e);
+      return;
+    }
     if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 4) return;
 
     // loop cut / add vertex use the click themselves
@@ -886,7 +972,11 @@ export class ModelEditor {
     }
 
     const hit = this.pickAt(e);
-    if (!hit) return;
+    if (!hit) {
+      // a click beside the model: nothing stays selected
+      this.deselectAll();
+      return;
+    }
     if (hit.cube.id !== this.selectedCubeId) {
       this.selectCube(hit.cube.id, hit.face);
       return;
@@ -914,6 +1004,11 @@ export class ModelEditor {
       return;
     }
     if (mod && !e.code.startsWith('Numpad')) return;
+    if (e.code === 'Escape') {
+      if (this.marquee?.active) this.endMarquee();
+      else if (this.deselectAll()) e.preventDefault();
+      return;
+    }
     if (e.code === 'F2' && this.selectedCubeId) {
       e.preventDefault();
       this.renameCubeInList(this.selectedCubeId);
@@ -1075,7 +1170,12 @@ export class ModelEditor {
     // ---- selected shape
     const cube = this.cube;
     if (!cube) {
-      this.inspectorEl.append(el('div', { class: 'empty muted', text: 'Add a shape with “+ Add shape…”.' }));
+      this.inspectorEl.append(
+        el('div', {
+          class: 'empty muted',
+          text: model.cubes.length > 0 ? 'No shape selected. Click one in the view or in the Shapes list.' : 'Add a shape with “+ Add shape…”.',
+        }),
+      );
       return;
     }
     const view = { name: cube.name, position: cube.position, rotation: cube.rotation, size: meshSize(cube.mesh) };
