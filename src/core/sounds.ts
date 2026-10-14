@@ -32,6 +32,8 @@ export const SOUND_IDS = {
   jump: 'sfx-jump',
   jump2: 'sfx-jump2',
   land: 'sfx-land',
+  /** One footstep: a soft, muffled pat, played again for every stride. */
+  step: 'sfx-step',
   theme: 'music-theme',
   /** The little sounds that play while a character's words appear (see `TALK_VOICES`). */
   talk: 'sfx-talk',
@@ -71,6 +73,19 @@ export function builtInSound(id: string): SoundAsset | null {
       return sfx(id, 'Double jump', 'jump', 5, 0.55, { startFreq: 0.4 });
     case SOUND_IDS.land:
       return sfx(id, 'Land', 'hit', 9, 0.35, { startFreq: 0.18, sustain: 0.01, decay: 0.12, slide: -0.2 });
+    case SOUND_IDS.step:
+      // a gentle pat on soft ground: low, rounded noise with a quiet start and a short tail
+      return sfx(id, 'Footstep', 'blip', 31, 0.22, {
+        wave: 3,
+        startFreq: 0.13,
+        attack: 0.05,
+        sustain: 0.05,
+        punch: 0.1,
+        decay: 0.2,
+        lpfCutoff: 0.55,
+        hpfCutoff: 0.02,
+        squareDuty: 0,
+      });
     case SOUND_IDS.theme:
       // the main theme: calm and spacious, a loop of a little over two minutes (the Audio tab can edit it like any tune)
       return { id, name: 'Theme', kind: 'music', volume: 0.55, music: ambientMusic(0) };

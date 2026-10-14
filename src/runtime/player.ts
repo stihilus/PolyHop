@@ -17,7 +17,7 @@ export interface PlayerInput {
 }
 
 /** Things that happened during a step that the game may want to hear or show. */
-export type PlayerEvent = 'jump' | 'doubleJump' | 'land' | 'splash';
+export type PlayerEvent = 'jump' | 'doubleJump' | 'land' | 'splash' | 'step';
 
 export const NO_INPUT: PlayerInput = {
   moveX: 0,
@@ -37,6 +37,11 @@ const NO_LIQUIDS: Box[] = [];
 const SWIM_SPEED = 0.6;
 /** Walking backwards (chase camera) is slower than walking forward. */
 const BACKWARD_SPEED = 0.7;
+
+/** Slower than this (m/s) the player is shuffling against something, not walking: no footsteps. */
+const MIN_STEP_SPEED = 0.5;
+/** The shortest stride (m), so a very slow or very fast setting does not make a rattle. */
+const MIN_STRIDE = 0.3;
 
 const wrapAngle = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -67,6 +72,8 @@ export class PlayerController {
   private onSteep = false;
   /** The player is gliding (jump held in the air after letting go once, falling). */
   gliding = false;
+  /** Ground covered since the last footstep (m); -1 = standing still or in the air, the next walk starts a stride half way. */
+  private stepDistance = -1;
   /** The middle of the body is in water. */
   swimming = false;
   /** The top of the water the player is in (for climbing out), or -Infinity. */
@@ -441,6 +448,33 @@ export class PlayerController {
       this.jumping = false;
       if (!wasGrounded && fallSpeed < -4) this.events.push('land');
     }
+
+    // --- footsteps: one for every stride of ground covered (a walk cycle is two strides)
+    const moved = Math.hypot(this.pos[0] - startX, this.pos[2] - startZ);
+    if (this.grounded && !this.swimming && dt > 0 && moved / dt > MIN_STEP_SPEED) {
+      const stride = this.strideLength();
+      // the first step comes soon after setting off, not after a whole stride
+      if (this.stepDistance < 0) this.stepDistance = stride * 0.5;
+      this.stepDistance += moved;
+      while (this.stepDistance >= stride) {
+        this.stepDistance -= stride;
+        this.events.push('step');
+      }
+    } else {
+      this.stepDistance = -1;
+    }
+  }
+
+  /**
+   * Ground covered between two footsteps, so that they fall in step with the walk cycle of the built-in character
+   * (0.8 s for two strides at the walk speed, 0.5 s at the run speed, 0.9 s crouched).
+   */
+  private strideLength(): number {
+    const s = this.settings;
+    if (this.crouching) return Math.max(MIN_STRIDE, s.crouchSpeed * 0.45);
+    const speed = Math.hypot(this.vel[0], this.vel[2]);
+    const split = (s.walkSpeed + s.runSpeed) / 2;
+    return Math.max(MIN_STRIDE, speed <= split ? s.walkSpeed * 0.4 : s.runSpeed * 0.25);
   }
 
   /**

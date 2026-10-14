@@ -4,6 +4,7 @@ import { SFX_KINDS, defaultSfx, mulberry, mutateSfx, renderSfx, sfxDuration, sfx
 import { SOUND_IDS, builtInSound, normalizeSounds, soundDuration } from '../src/core/sounds';
 import { createDefaultProject, ensurePresetAssets, normalizeProject } from '../src/core/types';
 import { presetRules, presetSounds } from '../src/core/presets';
+import { pruneForExport } from '../src/core/exportProject';
 
 const rms = (a: Float32Array) => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / Math.max(1, a.length));
 
@@ -193,5 +194,43 @@ describe('sounds in a project', () => {
     expect(sounds[1]!.file!.data).toBe('AAAA');
     expect(soundDuration(sounds[0]!)).toBeGreaterThan(0);
     expect(soundDuration(sounds[1]!)).toBeNull();
+  });
+});
+
+describe('the footstep sound', () => {
+  it('is a short, quiet sound that ships with every new project and is the player\'s default', () => {
+    const p = createDefaultProject();
+    expect(p.player.soundStep).toBe(SOUND_IDS.step);
+    const sound = p.sounds.find((s) => s.id === SOUND_IDS.step)!;
+    expect(sound).toBeTruthy();
+    expect(sound.kind).toBe('sfx');
+    expect(sound.volume).toBeLessThanOrEqual(0.4);
+    expect(soundDuration(sound)!).toBeLessThan(0.2);
+    // noise made low and soft: the samples never reach full scale once the sound's volume is applied
+    const samples = renderSfx(sound.sfx!, 44100, sound.seed ?? 1);
+    let peak = 0;
+    for (const v of samples) peak = Math.max(peak, Math.abs(v));
+    expect(peak * sound.volume).toBeLessThan(0.4);
+  });
+
+  it('an older project that has sounds gets it once, and keeps a player that was silent', () => {
+    const old = normalizeProject({ version: 15, sounds: [builtInSound(SOUND_IDS.coin)], player: {} });
+    expect(old.sounds.some((s) => s.id === SOUND_IDS.step)).toBe(true);
+    expect(old.player.soundStep).toBe(SOUND_IDS.step);
+    // deleted afterwards (the project is at the current version): it stays deleted, and the player is silent
+    const saved = JSON.parse(JSON.stringify(old));
+    saved.sounds = saved.sounds.filter((s: { id: string }) => s.id !== SOUND_IDS.step);
+    expect(normalizeProject(saved).sounds.some((s) => s.id === SOUND_IDS.step)).toBe(false);
+    expect(normalizeProject(saved).player.soundStep).toBeNull();
+    // a project without any sounds is left as it is
+    expect(normalizeProject({ version: 15, sounds: [] }).sounds).toEqual([]);
+  });
+
+  it('an exported game keeps the sound only when the player uses it', () => {
+    const p = createDefaultProject();
+    const used = pruneForExport(p);
+    expect(used.sounds.some((s) => s.id === SOUND_IDS.step)).toBe(true);
+    p.player.soundStep = null;
+    expect(pruneForExport(p).sounds.some((s) => s.id === SOUND_IDS.step)).toBe(false);
   });
 });

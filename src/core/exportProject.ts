@@ -36,7 +36,7 @@ export function pruneForExport(project: Project): Project {
   if (p.modelId) modelIds.add(p.modelId);
   for (const a of p.attachments) modelIds.add(a.modelId);
   if (p.skin) textureNames.add(p.skin);
-  for (const id of [p.soundJump, p.soundDoubleJump, p.soundLand, project.settings.music]) if (id) soundIds.add(id);
+  for (const id of [p.soundJump, p.soundDoubleJump, p.soundLand, p.soundStep, project.settings.music]) if (id) soundIds.add(id);
 
   const models = project.models.filter((m) => modelIds.has(m.id));
   for (const m of models) if (m.texture) textureNames.add(m.texture);

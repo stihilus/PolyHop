@@ -396,6 +396,9 @@ export class Game {
     this.onLevelShown?.(this.project.levels[this.levelIndex]!);
   }
 
+  /** Which foot the next footstep is (the sound is played a little lower for the second). */
+  private stepSide = 0;
+
   private playPlayerSounds(): void {
     const events = this.controller.events;
     if (events.length === 0) return;
@@ -404,7 +407,10 @@ export class Game {
       if (e === 'jump') this.audio.play(p.soundJump);
       else if (e === 'doubleJump') this.audio.play(p.soundDoubleJump);
       else if (e === 'splash') this.audio.play(p.soundLand, 0.6);
-      else this.audio.play(p.soundLand);
+      else if (e === 'step') {
+        // left and right foot: the same sound, the second a little lower
+        this.audio.play(p.soundStep, this.stepSide++ % 2 === 0 ? 1 : 0.88);
+      } else this.audio.play(p.soundLand);
     }
     events.length = 0;
   }

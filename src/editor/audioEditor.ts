@@ -380,7 +380,7 @@ export class AudioEditor {
     const project = this.store.project;
     project.sounds = project.sounds.filter((x) => x.id !== s.id);
     if (project.settings.music === s.id) project.settings.music = null;
-    for (const k of ['soundJump', 'soundDoubleJump', 'soundLand'] as const) if (project.player[k] === s.id) project.player[k] = null;
+    for (const k of ['soundJump', 'soundDoubleJump', 'soundLand', 'soundStep'] as const) if (project.player[k] === s.id) project.player[k] = null;
     this.selectedId = project.sounds[0]?.id ?? null;
     this.changed();
     this.refreshAll();
@@ -560,6 +560,7 @@ export class AudioEditor {
     if (p.player.soundJump === s.id) uses.push('jump');
     if (p.player.soundDoubleJump === s.id) uses.push('double jump');
     if (p.player.soundLand === s.id) uses.push('landing');
+    if (p.player.soundStep === s.id) uses.push('footsteps');
     const rules = p.levels.flatMap((l) => l.objects).filter((o) => o.rules.some((r) => r.actions.some((a) => a.type === 'sound' && a.sound === s.id))).length;
     if (rules > 0) uses.push(`${rules} object${rules === 1 ? '' : 's'}`);
     return uses.length > 0 ? `Used for: ${uses.join(', ')}.` : 'Not used yet. Pick it for the player in the Player settings, as music in Project Settings, or add a “Play sound” action to an object.';

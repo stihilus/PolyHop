@@ -187,6 +187,78 @@ describe('PlayerController', () => {
   });
 });
 
+describe('footsteps', () => {
+  /** Run for `seconds` and count the 'step' events (taking them out like the game does). */
+  function steps(p: PlayerController, seconds: number, input: Partial<PlayerInput>, boxes = [ground]): number {
+    let n = 0;
+    const count = Math.round(seconds / DT);
+    for (let i = 0; i < count; i++) {
+      p.update(DT, { ...NO_INPUT, ...input }, 0, boxes);
+      n += p.events.filter((e) => e === 'step').length;
+      p.events.length = 0;
+    }
+    return n;
+  }
+
+  it('walking makes one step for every stride, the first one soon after setting off', () => {
+    const p = make();
+    steps(p, 0.3, {}); // settle on the ground
+    const n = steps(p, 3, { moveY: 1 });
+    // 4 m/s for 3 s is about 12 m minus the speeding up; a stride is 1.6 m
+    expect(n).toBeGreaterThanOrEqual(6);
+    expect(n).toBeLessThanOrEqual(8);
+    const first = make();
+    steps(first, 0.3, {});
+    let at = -1;
+    for (let i = 0; i < 240 && at < 0; i++) {
+      first.update(DT, { ...NO_INPUT, moveY: 1 }, 0, [ground]);
+      if (first.events.includes('step')) at = i * DT;
+      first.events.length = 0;
+    }
+    expect(at).toBeGreaterThan(0);
+    expect(at).toBeLessThan(0.5);
+  });
+
+  it('standing still, or pushing against a wall, is silent', () => {
+    const idle = make();
+    expect(steps(idle, 2, {})).toBe(0);
+    const wall = boxFromCenterSize([0, 1, -1], [10, 2, 0.5]);
+    const p = make();
+    steps(p, 0.5, { moveY: 1 }, [ground, wall]); // walk into it
+    expect(steps(p, 2, { moveY: 1 }, [ground, wall])).toBe(0);
+  });
+
+  it('there are none in the air', () => {
+    const p = make([0, 0.01, 0]);
+    steps(p, 0.2, {});
+    p.update(DT, { ...NO_INPUT, moveY: 1, jumpPressed: true, jumpHeld: true }, 0, [ground]);
+    let n = 0;
+    for (let i = 0; i < 40 && !p.grounded; i++) {
+      p.update(DT, { ...NO_INPUT, moveY: 1, jumpHeld: true }, 0, [ground]);
+      n += p.events.filter((e) => e === 'step').length;
+      p.events.length = 0;
+      if (i > 5 && p.grounded) break;
+    }
+    expect(p.grounded).toBe(false);
+    expect(n).toBe(0);
+  });
+
+  it('running has a longer stride than walking, crouching a shorter one (per meter covered)', () => {
+    const perMeter = (input: Partial<PlayerInput>) => {
+      const p = make();
+      steps(p, 0.3, {});
+      const start = p.pos[2];
+      const n = steps(p, 4, input);
+      return n / Math.abs(p.pos[2] - start);
+    };
+    const walk = perMeter({ moveY: 1 });
+    const run = perMeter({ moveY: 1, run: true });
+    const crouch = perMeter({ moveY: 1, crouch: true });
+    expect(crouch).toBeGreaterThan(walk);
+    expect(run).toBeLessThan(walk);
+  });
+});
+
 describe('chase camera controls', () => {
   const chase = (over: Partial<PlayerSettings> = {}) => make([0, 0, 0], { cameraMode: 'chase', ...over });
 

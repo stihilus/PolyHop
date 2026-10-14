@@ -57,10 +57,11 @@ export interface PlayerSettings {
   skin: string | null;
   /** Models fixed to a bone of the player's model (hat, hair, backpack); they follow its animation. */
   attachments: PlayerAttachment[];
-  /** Sounds (ids) played on a jump, a jump in mid-air and a landing; null = silent. */
+  /** Sounds (ids) played on a jump, a jump in mid-air, a landing and for every footstep; null = silent. */
   soundJump: string | null;
   soundDoubleJump: string | null;
   soundLand: string | null;
+  soundStep: string | null;
 
   // size (meters)
   width: number;
@@ -327,6 +328,7 @@ export function defaultPlayer(): PlayerSettings {
     soundJump: SOUND_IDS.jump,
     soundDoubleJump: SOUND_IDS.jump2,
     soundLand: SOUND_IDS.land,
+    soundStep: SOUND_IDS.step,
     width: 0.6,
     height: 1.8,
     crouchHeight: 1.1,
@@ -651,8 +653,10 @@ export function createModelInstance(model: Model, position: Vec3): LevelModelIns
  * 12: the humanoid has no nose and its hair is a part of its own; there is a female build as well.
  * 13: the characters got a smaller, squarer head (a new layout, so the skins changed too).
  * 14: the built-in models were redrawn as cubes and quads only (the Hytale modeling guide); the characters too.
+ * 15: a new project is blank; the pickups (coin, key, apple, flag, trophy) are in Models next to the characters.
+ * 16: the player has a footstep sound; the built-in one is added to older projects.
  */
-export const PROJECT_VERSION = 15;
+export const PROJECT_VERSION = 16;
 
 export function createDefaultProject(): Project {
   return {
@@ -924,10 +928,16 @@ export function normalizeProject(raw: unknown): Project {
   // projects without variables or sounds simply have none (the starter ones belong to the starter level)
   const variables = r.variables !== undefined ? normalizeVariables(r.variables, newId) : [];
   const sounds = r.sounds !== undefined ? normalizeSounds(r.sounds, newId) : [];
+  // version 16: the footstep sound that the player uses by default (a project without sounds, and an exported game
+  // that has only what it uses, are left as they are)
+  if (rawVersion < 16 && r.exported !== true && sounds.length > 0 && !sounds.some((s) => s.id === SOUND_IDS.step)) {
+    const step = builtInSound(SOUND_IDS.step);
+    if (step) sounds.push(step);
+  }
   const known = new Set(sounds.map((s) => s.id));
   // a reference to a sound that does not exist is just silence
   if (settings.music !== null && (typeof settings.music !== 'string' || !known.has(settings.music))) settings.music = null;
-  for (const k of ['soundJump', 'soundDoubleJump', 'soundLand'] as const) {
+  for (const k of ['soundJump', 'soundDoubleJump', 'soundLand', 'soundStep'] as const) {
     if (player[k] !== null && (typeof player[k] !== 'string' || !known.has(player[k]!))) player[k] = null;
   }
   settings.volume = typeof settings.volume === 'number' ? Math.min(1, Math.max(0, settings.volume)) : base.settings.volume;

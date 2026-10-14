@@ -353,10 +353,15 @@ The **Audio** tab holds every sound of the project. Nothing needs a sound file: 
 | **Instruments** | Per channel: *Square*, *Triangle*, *Sawtooth*, *Sine* (chip sounds), *Soft piano*, *Bell*, *Pad* (soft, slow swell) and *Noise (drums)*. **note: N steps** is how long a note lasts: a piano rings that long, a pad swells and fades over it, chip notes fill it. |
 | **Space** | A slider for the size of the room (reverb): the notes ring on and fill the gaps. The loop wraps around, so the tail of the last notes runs into the start without a seam. |
 | **Import** | *Import…* reads a WAV / OGG / MP3 file (stored inside the project). |
-| **Starter sounds** | Puts the built-in set back (coin, key, door, hit, power-up, checkpoint, jump, double jump, land, theme). |
-| **Use a sound** | Rules > *Play sound* (the presets already do), Player > *Sounds* for jump / double jump / land, Project settings > *Sound* for the music and the volume. |
+| **Starter sounds** | Puts the built-in set back (coin, key, door, hit, power-up, checkpoint, jump, double jump, land, footstep, theme, the talk voices). |
+| **Use a sound** | Rules > *Play sound* (the presets already do), Player > *Sounds* for jump / double jump / land / footsteps, Project settings > *Sound* for the music and the volume. |
 
 The music loops while playing and stops with Stop. In an exported game **M** mutes everything.
+
+**Footsteps.** The player plays the *Footstep* sound (a gentle, muffled pat) once per stride while walking, running
+or crouching on the ground: not standing still, not against a wall, not in the air or in water. The strides follow
+the walk cycle of the built-in character (a run has longer strides, a crouch shorter ones) and the second foot plays the
+sound a little lower. Pick another sound, or *Silent*, in Player > Sounds > Footsteps.
 
 **The main theme** (the default music of a new project, *Theme* in the list) is a calm piece in the spirit of
 Minecraft's: a slow soft piano with long silences, an arpeggio underneath, a few bells and three pads in a big

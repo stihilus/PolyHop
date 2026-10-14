@@ -76,6 +76,7 @@ export function playerFields(sounds: { id: string; name: string }[]): Field[] {
     sound('soundJump', 'Jump'),
     sound('soundDoubleJump', 'Double jump'),
     sound('soundLand', 'Landing'),
+    sound('soundStep', 'Footsteps'),
 
     { kind: 'section', label: 'Camera' },
     {
