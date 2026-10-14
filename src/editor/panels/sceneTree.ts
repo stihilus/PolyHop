@@ -89,10 +89,10 @@ export function fillHierarchy(tree: HTMLElement, store: Store, filter = ''): voi
       el('span', { class: 'tree-label', text: label }),
     );
   tree.append(row('◉', 'Player', sel.kind === 'player', () => store.select({ kind: 'player' })));
-  // ordinary objects are yellow (★ when they do something); a component's master is a filled purple diamond and its
-  // instances hollow ones
+  // ordinary objects are yellow (★ when they do something); an instance of a component is a purple hollow diamond (the
+  // component itself is in the Assets and the Models)
   const iconOf = (o: (typeof store.objects)[number]): { text: string; cls: string } => {
-    if (o.kind === 'model' && store.getModel(o.modelId)?.component) return { text: o.master ? '◆' : '◇', cls: ' icon-component' };
+    if (o.kind === 'model' && store.getModel(o.modelId)?.component) return { text: '◇', cls: ' icon-component' };
     return { text: o.rules.length > 0 ? '★' : '▣', cls: '' };
   };
   const objectRow = (o: (typeof store.objects)[number], extra = '') =>

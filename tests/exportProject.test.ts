@@ -46,17 +46,13 @@ describe('export pruning', () => {
     expect(out.models.some((m) => m.id === ITEM_MODEL_IDS.coin)).toBe(p.levels.some((l) => l.objects.some((o) => o.kind === 'model' && o.modelId === ITEM_MODEL_IDS.coin)));
   });
 
-  it('leaves the editor-only marks of components out, and keeps what the game plays', () => {
+  it('leaves the default behavior of components out, and keeps what the game plays', () => {
     const p = createDefaultProject();
     const coinModel = p.models.find((m) => m.id === ITEM_MODEL_IDS.coin)!;
     const coin = placeInstance(coinModel, [1, 1, 1], ids);
-    coin.master = true;
-    coin.overrides = ['rules'];
     p.levels[0]!.objects.push(coin);
     const out = pruneForExport(p);
     const kept = out.levels[0]!.objects.find((o) => o.id === coin.id)!;
-    expect(kept.kind === 'model' && kept.master).toBeUndefined();
-    expect(kept.kind === 'model' && kept.overrides).toBeUndefined();
     // the coin itself is still there, with its rules, and its model without the default behavior
     expect(kept.rules.length).toBeGreaterThan(0);
     const model = out.models.find((m) => m.id === ITEM_MODEL_IDS.coin)!;

@@ -62,6 +62,21 @@ export interface BehaviorOptions {
   newId: () => string;
 }
 
+/** What the rules do, as a short read-only list: "When the player touches this: Add to a variable, Play a sound". */
+export function buildRulesSummary(rules: Rule[]): HTMLElement {
+  const root = el('div', { class: 'rules-summary' });
+  if (rules.length === 0) {
+    root.append(el('div', { class: 'empty muted', text: 'No rules: it does nothing.' }));
+    return root;
+  }
+  for (const rule of rules) {
+    const event = RULE_EVENTS.find((e) => e.value === rule.event)?.label ?? rule.event;
+    const what = rule.actions.map((a) => ACTION_LABELS[a.type]).join(' · ') || 'nothing yet';
+    root.append(el('div', { class: 'rule-line' }, el('span', { class: 'rule-when', text: `When ${event}` }), el('span', { class: 'muted', text: what })));
+  }
+  return root;
+}
+
 /** "When … if … then …" rules of one object, as small cards. */
 export function buildBehaviorEditor(opts: BehaviorOptions): HTMLElement {
   const root = el('div', { class: 'behavior' });

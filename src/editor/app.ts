@@ -1,4 +1,3 @@
-import type { Rule } from '../core/logic';
 import { type PresetKind, presetRules } from '../core/presets';
 import { isComponent, modelDefaults, presetOfModel } from '../core/components';
 import type { Model } from '../core/types';
@@ -26,7 +25,7 @@ import type { Store, StoreEvent } from './store';
 import { clear, el } from './ui/dom';
 import { keyLabel, openSettingsDialog } from './ui/settingsDialog';
 import { icon } from './ui/icons';
-import { buildBehaviorEditor } from './ui/logicPanels';
+import { buildBehaviorEditor, buildRulesSummary } from './ui/logicPanels';
 import { renameInline } from './ui/rename';
 import { DEFAULT_EXPORT_OPTIONS, exportGame } from './exportGame';
 import { openExportDialog } from './ui/exportDialog';
@@ -277,6 +276,9 @@ export class EditorApp {
       openAnimation: (id) => this.openAnimation(id),
       selectAsset: (id) => this.selectAsset(id),
       selectObject: (id) => this.store.select({ kind: 'object', id }),
+      selectPlacements: (id) => {
+        if (this.store.selectInstancesOf(id) === 0) this.hudTop.textContent = 'This component is not placed in the level being edited.';
+      },
       placeModel: (id, at) => this.placeModel(id, at),
       makeComponent: (id) => this.makeComponent(id),
       editInModels: (id) => this.editInModels(id),
@@ -390,6 +392,7 @@ export class EditorApp {
       this.setMode('level');
       this.placeModel(modelId, this.viewport.viewCenterPoint());
     };
+    this.modelEditor.behaviorEditorFor = (model) => this.componentBehaviorEditor(model);
     this.modelEditor.onEditTexture = (name) => {
       this.setMode('paint');
       this.paintEditor.open(name, this.modelEditor.currentModelId ?? '');
@@ -686,14 +689,14 @@ export class EditorApp {
       this.hudTop.textContent = 'This object cannot be a component.';
       return;
     }
-    this.hudTop.textContent = 'Now a component: it is in the Assets, and what you place from there follows it.';
+    // the component is in the Assets, selected: its look and behavior are edited there, this object is an instance of it
+    this.hudTop.textContent = 'Now a component, in the Assets. This object is an instance of it: its shapes and behavior are edited there.';
     window.clearTimeout(this.noticeTimer);
     this.noticeTimer = window.setTimeout(() => {
       if (!this.viewport.playing) this.hudTop.textContent = '';
-    }, 4000);
-    this.refreshAssets();
-    this.refreshInspector();
+    }, 5000);
     this.refreshHierarchy();
+    this.selectAsset(id);
   }
 
   /** The object is opened in Models: a block first becomes an ordinary object made of a model. */
@@ -910,70 +913,49 @@ export class EditorApp {
     this.assetsTimer = window.setTimeout(() => this.refreshAssets(), 150);
   }
 
-  /**
-   * Where the rules of an object are edited, and what an edit means. An ordinary object and a block have their own
-   * rules. The master placement of a component edits the default behavior of the component (all its instances
-   * follow). Another instance edits its own rules and from then on sets them itself.
-   */
-  private rulesOwner(obj: LevelObject): { rules: Rule[]; changed: () => void; replace: (rules: Rule[]) => void } {
-    const model = obj.kind === 'model' ? this.store.getModel(obj.modelId) : undefined;
-    if (obj.kind === 'model' && model && isComponent(model)) {
-      if (obj.master) {
-        const d = modelDefaults(model);
-        const ensure = () => {
-          model.defaults ??= { ...d, rules: d.rules };
-          return model.defaults;
-        };
-        return {
-          rules: ensure().rules,
-          changed: () => this.store.componentChanged(model.id, 'edit:rules'),
-          replace: (rules) => {
-            ensure().rules = rules;
-            this.store.componentChanged(model.id, 'edit:rules');
-          },
-        };
-      }
-      return {
-        rules: obj.rules,
-        changed: () => {
-          this.store.overrideInstance(obj.id, 'rules');
-          this.store.objectChanged(obj.id);
-        },
-        replace: (rules) => {
-          obj.rules = rules;
-          this.store.overrideInstance(obj.id, 'rules');
-          this.store.objectChanged(obj.id);
-        },
-      };
-    }
-    return {
-      rules: obj.rules,
-      changed: () => this.store.objectChanged(obj.id),
-      replace: (rules) => {
-        obj.rules = rules;
-        this.store.objectChanged(obj.id);
-      },
-    };
-  }
-
-  /** The rule editor of an object. */
+  /** The rule editor of an object. An instance of a component has none: it does what the component does. */
   private behaviorEditor(obj: LevelObject, apply: (kind: PresetKind) => void): HTMLElement {
-    const owner = this.rulesOwner(obj);
+    const model = obj.kind === 'model' ? this.store.getModel(obj.modelId) : undefined;
+    if (obj.kind === 'model' && model && isComponent(model)) return this.sharedBehavior(model);
     return buildBehaviorEditor({
-      rules: owner.rules,
+      rules: obj.rules,
       variables: () => this.store.project.variables.map((v) => v.name),
       sounds: () => this.store.project.sounds.map((x) => ({ id: x.id, name: x.name })),
       objects: () => this.store.objects.map((o) => ({ id: o.id, name: o.name })),
       levels: () => this.store.project.levels.map((l) => ({ id: l.id, name: l.name })),
       animations: (target) => {
         const o = target ? this.store.getObject(target) : obj;
-        const model = o && o.kind === 'model' ? this.store.getModel(o.modelId) : undefined;
-        return model ? model.clips.map((c) => c.name) : [];
+        const m = o && o.kind === 'model' ? this.store.getModel(o.modelId) : undefined;
+        return m ? m.clips.map((c) => c.name) : [];
       },
-      onChange: () => owner.changed(),
+      onChange: () => this.store.objectChanged(obj.id),
       applyPreset: apply,
       newId,
     });
+  }
+
+  /** What an instance shows of its behavior: what its component does, and the way to change it (there). */
+  private sharedBehavior(model: Model): HTMLElement {
+    const root = el('div', { class: 'behavior shared-behavior' });
+    const placed = this.store.project.levels.reduce((n, l) => n + l.objects.filter((o) => o.kind === 'model' && o.modelId === model.id).length, 0);
+    root.append(
+      el('div', { class: 'form-section', text: 'Behavior (the component’s)' }),
+      el('div', {
+        class: 'empty muted',
+        text: `A component does one thing, and all ${placed} of its placements do it. Change it in the component.`,
+      }),
+      buildRulesSummary(modelDefaults(model).rules),
+      el(
+        'div',
+        { class: 'button-stack' },
+        el('button', {
+          class: 'btn component-btn',
+          text: `Edit the behavior of “${model.name}”`,
+          onclick: () => this.selectAsset(model.id),
+        }),
+      ),
+    );
+    return root;
   }
 
   /** The rule editor of what the placements of a component do by default (an asset has no neighbours to point at). */
@@ -1003,7 +985,8 @@ export class EditorApp {
   /** Give an object the behavior of a preset (and the variables and sounds it needs). */
   private applyPreset(obj: LevelObject, kind: PresetKind): void {
     this.ensureSupport(kind);
-    this.rulesOwner(obj).replace(presetRules(kind, newId));
+    obj.rules = presetRules(kind, newId);
+    this.store.objectChanged(obj.id);
     this.refreshHierarchy();
     this.refreshInspector();
   }

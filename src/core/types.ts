@@ -8,7 +8,7 @@ import { geometryHash } from './modelHash';
 import { ITEM_MODEL_IDS, type ItemKind, createItemModel } from './items';
 import { type Rule, type Variable, normalizeRules, normalizeVariables } from './logic';
 import { PRESETS, type PresetKind, missingVariables, presetSounds, presetVariables } from './presets';
-import { INSTANCE_OVERRIDES, PRESET_MODEL_ID, builtInComponent, builtInComponents, cloneRules, makeVariant, modelFromBlock } from './components';
+import { PRESET_MODEL_ID, builtInComponent, builtInComponents, cloneRules, followsComponent, makeVariant, modelFromBlock } from './components';
 import { type MenuScreen, normalizeMenu } from './menu';
 import { type SplashScreen, normalizeSplash } from './splash';
 import { type LevelLook, normalizeLook } from './look';
@@ -301,19 +301,9 @@ export interface LevelModelInstance {
   animationSpeed: number;
   collide: boolean;
   rules: Rule[];
-  /**
-   * Of an instance of a component: the placement it was made from (purple, filled). Its shape can be edited in
-   * place; the other instances only follow it.
-   */
-  master?: boolean;
-  /** Which of `rules`, `collide` and `animation` this instance sets itself instead of following its component. */
-  overrides?: InstanceOverride[];
   /** A color this instance is multiplied with, on top of its component's. */
   tint?: string;
 }
-
-/** What an instance of a component may set by itself instead of following the component. */
-export type InstanceOverride = 'rules' | 'collide' | 'animation';
 
 export type LevelObject = LevelBlock | LevelModelInstance;
 
@@ -765,8 +755,9 @@ export function createModelInstance(model: Model, position: Vec3): LevelModelIns
  * 15: a new project is blank; the pickups (coin, key, apple, flag, trophy) are in Models next to the characters.
  * 16: the player has a footstep sound; the built-in one is added to older projects.
  * 17: game objects are components (see components.ts): the assets (prefabs) became models, with a behavior of their own.
+ * 18: a component has one behavior and its instances do exactly that; an instance that did something else is an object of its own.
  */
-export const PROJECT_VERSION = 17;
+export const PROJECT_VERSION = 18;
 
 export function createDefaultProject(): Project {
   return {
@@ -852,10 +843,6 @@ export function normalizeObject(o: Partial<LevelObject> & { kind?: string; size?
       animationSpeed: typeof m.animationSpeed === 'number' && m.animationSpeed > 0 ? m.animationSpeed : 1,
       collide: m.collide ?? true,
       rules: normalizeRules(m.rules, newId),
-      ...(m.master === true ? { master: true } : {}),
-      ...(Array.isArray(m.overrides) && m.overrides.some((k) => INSTANCE_OVERRIDES.includes(k))
-        ? { overrides: INSTANCE_OVERRIDES.filter((k) => (m.overrides as string[]).includes(k)) }
-        : {}),
       ...(typeof m.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(m.tint) && m.tint.toLowerCase() !== '#ffffff' ? { tint: m.tint } : {}),
     };
   }
@@ -1062,6 +1049,8 @@ export function normalizeProject(raw: unknown): Project {
   if (rawVersion < 7) dropRetiredProps(models, levels, player);
   // version 17: the game objects (assets) are components, and a model that is placed is one too
   if (rawVersion < 17 && !exported) migrateToComponents((r as { prefabs?: unknown }).prefabs, models, levels);
+  // version 18: a component has one behavior; an instance that did something else becomes an object of its own
+  if (rawVersion < 18 && !exported) detachUnlike(models, levels);
   return { version: PROJECT_VERSION, settings, player, textures, models, variables, sounds, levels, ...(exported ? { exported } : {}) };
 }
 
@@ -1113,16 +1102,53 @@ function migrateToComponents(rawPrefabs: unknown, models: Model[], levels: Level
   for (const preset of PRESETS) {
     if (!find(PRESET_MODEL_ID[preset.kind])) models.push(builtInComponent(preset.kind, newId));
   }
-  // a model that is placed (or is one of the characters) is a master; its instances keep their own behavior
-  const placed = new Set<string>();
+  // a model that is placed (or is one of the characters) is a component; one that has no behavior yet gets what its first
+  // placement does (the placements that do something else are made objects of their own afterwards, see detachUnlike)
+  const first = new Map<string, LevelModelInstance>();
+  for (const l of levels) for (const o of l.objects) if (o.kind === 'model' && !first.has(o.modelId)) first.set(o.modelId, o);
+  for (const m of models) {
+    const placed = first.get(m.id);
+    if (!placed && !HUMANOID_IDS.includes(m.id)) continue;
+    m.component = true;
+    if (placed && !m.defaults) {
+      m.defaults = {
+        rules: cloneRules(placed.rules, newId),
+        collide: placed.collide,
+        animation: placed.animation,
+        animationSpeed: placed.animationSpeed,
+      };
+    }
+  }
+}
+
+/**
+ * A component does one thing, and so do all its instances. An instance that does something else (it was edited on its
+ * own, in an older version) becomes an ordinary object with shapes of its own, so it keeps what it does. Instances that
+ * did the same share one such model.
+ */
+function detachUnlike(models: Model[], levels: LevelData[]): void {
+  const byId = new Map(models.map((m) => [m.id, m] as const));
+  const made = new Map<string, Model>();
+  const behaviorKey = (o: LevelModelInstance) =>
+    JSON.stringify([o.collide, o.animation, o.animationSpeed, o.rules.map(({ id: _id, ...rest }) => rest)]);
   for (const l of levels) {
     for (const o of l.objects) {
       if (o.kind !== 'model') continue;
-      placed.add(o.modelId);
-      o.overrides = [...INSTANCE_OVERRIDES];
+      const m = byId.get(o.modelId);
+      if (!m || !m.component || followsComponent(o, m)) continue;
+      const key = `${m.id}|${behaviorKey(o)}`;
+      let own = made.get(key);
+      if (!own) {
+        own = cloneModel(m);
+        own.name = m.name;
+        delete own.component;
+        delete own.defaults;
+        made.set(key, own);
+        models.push(own);
+      }
+      o.modelId = own.id;
     }
   }
-  for (const m of models) if (placed.has(m.id) || HUMANOID_IDS.includes(m.id)) m.component = true;
 }
 
 /** Remove the retired prop models a project does not use anywhere (a placed one is the user's choice). */

@@ -64,15 +64,6 @@ export function pruneForExport(project: Project): Project {
     models,
     textures: project.textures.filter((t) => textureNames.has(t.name)),
     sounds: project.sounds.filter((s) => soundIds.has(s.id)),
-    // the marks of the components mean nothing in the game
-    levels: project.levels.map((l) => ({
-      ...l,
-      objects: l.objects.map((o) => {
-        if (o.kind !== 'model') return o;
-        const { master: _master, overrides: _overrides, ...rest } = o;
-        return rest;
-      }),
-    })),
     exported: true,
   };
 }

@@ -42,7 +42,7 @@ import { TransformBar } from './ui/transformBar';
 import { appConfirm } from './ui/dialogs';
 import { facesInMarquee, marqueeOf, mergeSelection, verticesInMarquee } from './boxSelect';
 import { isComponent, isTiled, makesCycle } from '../core/components';
-import { buildModelLookEditor, componentBadge } from './ui/modelLook';
+import { buildDefaultsEditor, buildModelLookEditor, componentBadge } from './ui/modelLook';
 import { AxisGizmo, buildViewMenu } from './ui/viewControls';
 
 const SNAP_OPTIONS = [
@@ -76,6 +76,8 @@ export class ModelEditor {
   readonly root: HTMLElement;
   /** Called by the "Place in level" button. */
   onPlaceInLevel?: (modelId: string) => void;
+  /** The rule editor of a component's behavior (made by the app, which knows the variables, sounds and levels). */
+  behaviorEditorFor?: (model: Model) => HTMLElement;
   /** Called by "Paint this texture": the app opens the Paint mode on this texture. */
   onEditTexture?: (textureName: string) => void;
 
@@ -1408,6 +1410,14 @@ export class ModelEditor {
         rerender: () => this.refreshInspector(),
       }),
     );
+    // a component does one thing, and every instance does it: its behavior is here, with its shapes
+    if (comp) {
+      root.append(
+        el('div', { class: 'form-section', text: 'Every instance does this' }),
+        buildDefaultsEditor(model, () => this.store.componentChanged(model.id, 'edit:defaults')),
+      );
+      if (this.behaviorEditorFor) root.append(this.behaviorEditorFor(model));
+    }
     return root;
   }
 

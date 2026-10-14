@@ -1,9 +1,10 @@
-// Components: a model that is a master. It is placed as linked instances that follow every change of it (its shapes,
-// its look and, until an instance says otherwise, what it does). Like a prefab of Unity or a component of Figma.
+// Components: a model that is a master. It is placed as linked instances that follow every change of it: its shapes, its
+// look and what it does. Like a prefab of Unity or a component of Figma.
 //
 //  - an ordinary object (yellow) belongs to one place in the level;
-//  - a component (purple) is kept in the Assets and placed many times: its instances are the same object;
-//  - the placement a component was made from is its master placement (a filled mark): its shape is edited there;
+//  - a component (purple) lives in the Assets and the Models, never in the level: the level only has its instances;
+//  - a component has ONE behavior (rules, solid, animation). Every instance does exactly that: an instance that has to do
+//    something else is another object (a variant, or detached);
 //  - a variant is a component made from another one: the same shapes, with a look and a behavior of its own;
 //  - a component can hold other components (parts): a house made of walls, a roof and a door.
 //
@@ -15,7 +16,6 @@ import { PRESETS, type PresetKind, presetRules } from './presets';
 import { createPropModel, propModelId } from './props';
 import { degreesFromQuaternion, quaternionFromDegrees, worldPoints } from './shape';
 import type {
-  InstanceOverride,
   LevelBlock,
   LevelData,
   LevelModelInstance,
@@ -33,8 +33,6 @@ import * as THREE from 'three';
 
 type Idgen = () => string;
 
-/** What an instance of a component may set by itself (the others follow the component). */
-export const INSTANCE_OVERRIDES: readonly InstanceOverride[] = ['rules', 'collide', 'animation'];
 
 // ---------------------------------------------------------------- what a model is, with the gaps filled
 
@@ -103,20 +101,16 @@ export function placeInstance(model: Model, at: Vec3, idGen: Idgen): LevelModelI
   };
 }
 
-/** Bring an instance in line with its component: what it does not set itself follows the component. */
-export function applyDefaults(inst: LevelModelInstance, model: Model, idGen: Idgen, only?: InstanceOverride): void {
+/** Bring an instance in line with its component: it does what the component does. */
+export function applyDefaults(inst: LevelModelInstance, model: Model, idGen: Idgen): void {
   const d = modelDefaults(model);
-  const own = new Set(inst.overrides ?? []);
-  const wants = (key: InstanceOverride) => (only === undefined || only === key) && !own.has(key);
-  if (wants('rules')) inst.rules = cloneRules(d.rules, idGen);
-  if (wants('collide')) inst.collide = d.collide;
-  if (wants('animation')) {
-    inst.animation = d.animation;
-    inst.animationSpeed = d.animationSpeed;
-  }
+  inst.rules = cloneRules(d.rules, idGen);
+  inst.collide = d.collide;
+  inst.animation = d.animation;
+  inst.animationSpeed = d.animationSpeed;
 }
 
-/** Every instance of the component, in all levels, follows it again (what they set themselves stays). Returns them. */
+/** Every instance of the component, in all levels, does what it does now. Returns them. */
 export function syncInstances(levels: LevelData[], model: Model, idGen: Idgen): LevelModelInstance[] {
   const changed: LevelModelInstance[] = [];
   for (const l of levels) {
@@ -129,21 +123,16 @@ export function syncInstances(levels: LevelData[], model: Model, idGen: Idgen): 
   return changed;
 }
 
-/** The instance sets this itself from now on. */
-export function setOverride(inst: LevelModelInstance, key: InstanceOverride): void {
-  if (!(inst.overrides ?? []).includes(key)) inst.overrides = [...(inst.overrides ?? []), key];
-}
+const sameRules = (a: Rule[], b: Rule[]): boolean => {
+  const strip = (rules: Rule[]) => JSON.stringify(rules.map(({ id: _id, ...rest }) => rest));
+  return strip(a) === strip(b);
+};
 
-/** The instance follows its component again for this (or for everything). */
-export function clearOverride(inst: LevelModelInstance, model: Model, idGen: Idgen, key?: InstanceOverride): void {
-  const keys = key ? [key] : [...INSTANCE_OVERRIDES];
-  inst.overrides = (inst.overrides ?? []).filter((k) => !keys.includes(k));
-  if (inst.overrides.length === 0) delete inst.overrides;
-  for (const k of keys) applyDefaults(inst, model, idGen, k);
+/** Does the instance do what its component does (rules, solid, animation)? */
+export function followsComponent(inst: LevelModelInstance, model: Model): boolean {
+  const d = modelDefaults(model);
+  return inst.collide === d.collide && inst.animation === d.animation && inst.animationSpeed === d.animationSpeed && sameRules(inst.rules, d.rules);
 }
-
-export const isOverridden = (inst: LevelModelInstance, key?: InstanceOverride): boolean =>
-  key ? (inst.overrides ?? []).includes(key) : (inst.overrides ?? []).length > 0;
 
 /** The instances of a component, in all levels. */
 export function instancesOf(levels: LevelData[], modelId: string): LevelModelInstance[] {
@@ -180,8 +169,8 @@ export function modelFromBlock(block: LevelBlock, idGen: Idgen, id = idGen()): M
 }
 
 /**
- * The block becomes a component (a master): the model that replaces it, and the placement that takes its place
- * (same position and turn, flagged as the master).
+ * The block becomes a component: the model, and the instance that takes the block's place in the level (same id,
+ * position and turn). The component itself is in the Assets and the Models, not in the level.
  */
 export function componentFromBlock(
   block: LevelBlock,
@@ -203,12 +192,11 @@ export function componentFromBlock(
     animationSpeed: 1,
     collide: block.collide,
     rules: block.rules,
-    ...(asComponent ? { master: true } : {}),
   };
   return { model, instance };
 }
 
-/** A model becomes a component, with what the placement it is made from does as its default. */
+/** A model becomes a component, with what the placement it is made from does as what every instance does. */
 export function componentFromInstance(model: Model, inst: LevelModelInstance, idGen: Idgen): void {
   model.component = true;
   model.defaults = {
@@ -218,8 +206,6 @@ export function componentFromInstance(model: Model, inst: LevelModelInstance, id
     animationSpeed: inst.animationSpeed,
     ...(inst.scale.some((n) => n !== 1) ? { scale: [...inst.scale] as Vec3 } : {}),
   };
-  inst.master = true;
-  delete inst.overrides;
 }
 
 /** A variant of a component: the same shapes, a new name, its own look and behavior (a copy of the component's). */

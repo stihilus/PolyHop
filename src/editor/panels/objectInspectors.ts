@@ -2,13 +2,13 @@
 // (an asset) selected in the Assets.
 
 import * as THREE from 'three';
-import { instancesOf, isComponent, isOverridden, modelDefaults, modelLook, modelSize } from '../../core/components';
+import { instancesOf, isComponent, modelLook, modelSize } from '../../core/components';
 import { recenterMesh, meshSize, scaleMeshToSize } from '../../core/mesh';
 import { quaternionFromDegrees } from '../../core/shape';
 import { type LevelBlock, type LevelModelInstance, type LevelObject, type Model, type Vec3 } from '../../core/types';
 import { clear, el } from '../ui/dom';
 import { type Field, buildForm } from '../ui/form';
-import { buildModelLookEditor, componentBadge } from '../ui/modelLook';
+import { buildDefaultsEditor, buildModelLookEditor, componentBadge } from '../ui/modelLook';
 import { buildTilePicker } from '../ui/tilePicker';
 import { BLOCK_FIELDS } from './fields';
 import type { PanelHost } from './host';
@@ -134,7 +134,7 @@ export function buildBlockInspector(host: PanelHost, obj: LevelBlock): void {
   host.inspector.append(buildMakeComponent(host, obj));
 }
 
-/** "Component" section of an ordinary object: make it a component (a master) to place linked copies of it. */
+/** "Component" section of an ordinary object: make it a component to place linked copies of it. */
 export function buildMakeComponent(host: PanelHost, obj: LevelObject): HTMLElement {
   const root = el('div', { class: 'component-link' });
   root.append(el('div', { class: 'form-section', text: 'Component' }));
@@ -144,7 +144,7 @@ export function buildMakeComponent(host: PanelHost, obj: LevelObject): HTMLEleme
       class: 'empty muted',
       text: isTerrain
         ? 'A sculpted terrain belongs to its place and cannot be a component.'
-        : 'An ordinary object. Make it a component to keep it in the Assets and place more of it: they all follow every change you make to it.',
+        : 'An ordinary object. Make it a component to keep it in the Assets and place more of it. The component is the master: shapes and behavior are edited there, and every placement does the same.',
     }),
     el(
       'div',
@@ -153,7 +153,7 @@ export function buildMakeComponent(host: PanelHost, obj: LevelObject): HTMLEleme
         class: 'btn component-btn',
         text: 'Make component',
         disabled: isTerrain,
-        title: 'It stays here as the master (purple); the component is in the Assets',
+        title: 'The component goes to the Assets (and the Models); this object stays here as an instance of it',
         onclick: () => host.makeComponent(obj.id),
       }),
     ),
@@ -161,19 +161,13 @@ export function buildMakeComponent(host: PanelHost, obj: LevelObject): HTMLEleme
   return root;
 }
 
-/** A model placed in the level: an instance of a component, its master placement, or an ordinary object of shapes. */
+/** A model placed in the level: an instance of a component, or an ordinary object made of shapes of its own. */
 export function buildModelInstanceInspector(host: PanelHost, obj: LevelModelInstance): void {
   const { store } = host;
   const model = store.getModel(obj.modelId);
   const comp = isComponent(model);
-  const master = comp && obj.master === true;
-  const defaults = model ? modelDefaults(model) : null;
   const size = model ? modelSize(model) : ([1, 1, 1] as Vec3);
   const tinted = model ? modelLook(model).tint : '#ffffff';
-
-  // what an instance sets itself is marked; the master edits the component
-  const own = (key: 'rules' | 'collide' | 'animation') => comp && !master && isOverridden(obj, key);
-  const followsLabel = (label: string, key: 'rules' | 'collide' | 'animation') => (own(key) ? `${label} (set here)` : label);
 
   const view = {
     name: obj.name,
@@ -192,44 +186,33 @@ export function buildModelInstanceInspector(host: PanelHost, obj: LevelModelInst
     { kind: 'vec3', key: 'rotation', label: 'Rotation', step: 15, unit: '°' },
     { kind: 'vec3', key: 'scale', label: 'Scale', step: 0.1 },
     ...(model && model.cubes.length > 0
-      ? [
-          {
-            kind: 'vec3',
-            key: 'size',
-            label: 'Size',
-            step: 0.5,
-            unit: 'm',
-            hint: master ? 'The size of the component: every instance follows.' : 'The size in meters: it sets the scale of this placement.',
-          } as Field,
-        ]
+      ? [{ kind: 'vec3', key: 'size', label: 'Size', step: 0.5, unit: 'm', hint: 'The size in meters: it sets the scale of this placement.' } as Field]
       : []),
     { kind: 'color', key: 'tint', label: 'Tint', hint: 'Colors this placement; the component keeps its own look' },
-    {
-      kind: 'select',
-      key: 'animation',
-      label: followsLabel('Animation', 'animation'),
-      nullable: true,
-      noneLabel: 'None (still)',
-      options: (model?.clips ?? []).map((c) => ({ value: c.name, label: c.name })),
-      hint: 'Plays this animation of the model, looping. Make animations in the Animate tab. The collision box does not move.',
-    },
-    { kind: 'number', key: 'animationSpeed', label: 'Anim speed', min: 0.1, max: 8, step: 0.1, unit: '×' },
-    { kind: 'bool', key: 'collide', label: followsLabel('Solid', 'collide'), hint: 'Each shape of the model becomes a collision box' },
+    // an instance does what its component does (set there); an ordinary object has its own
+    ...(comp
+      ? []
+      : ([
+          {
+            kind: 'select',
+            key: 'animation',
+            label: 'Animation',
+            nullable: true,
+            noneLabel: 'None (still)',
+            options: (model?.clips ?? []).map((c) => ({ value: c.name, label: c.name })),
+            hint: 'Plays this animation of the model, looping. Make animations in the Animate tab. The collision box does not move.',
+          },
+          { kind: 'number', key: 'animationSpeed', label: 'Anim speed', min: 0.1, max: 8, step: 0.1, unit: '×' },
+          { kind: 'bool', key: 'collide', label: 'Solid', hint: 'Each shape of the model becomes a collision box' },
+        ] as Field[])),
   ];
 
-  const mark = (key: 'rules' | 'collide' | 'animation') => {
-    if (!comp) return;
-    if (master) store.componentChanged(obj.modelId, `edit:${key}`);
-  };
-
   host.inspector.append(
-    el('div', { class: 'section-title', text: `${comp ? 'Component' : 'Object'} · ${obj.name}` }),
+    el('div', { class: 'section-title', text: `${comp ? 'Instance' : 'Object'} · ${obj.name}` }),
     comp
       ? componentBadge(
-          master
-            ? `Master of “${model?.name}”. Its size, look and behavior are edited here, its shapes in Models; every instance follows it.`
-            : `Instance of “${model?.name}”. It follows the component; its shapes are edited in the master (Models).`,
-          master ? 'master' : 'instance',
+          `Instance of “${model?.name}”. It looks and behaves like its component: the shapes and the behavior are edited there.`,
+          'instance',
         )
       : componentBadge('An ordinary object made of shapes of its own.', 'object'),
     buildForm(fields, view as unknown as Record<string, unknown>, (key) => {
@@ -238,14 +221,7 @@ export function buildModelInstanceInspector(host: PanelHost, obj: LevelModelInst
           obj.name = view.name;
           break;
         case 'size': {
-          // the master of a one-shape component: its size is the size of the component (every instance follows)
-          if (master && model && model.cubes.length === 1 && obj.scale.every((n) => n === 1)) {
-            store.resizeComponent(model.id, [Math.max(0.0625, view.size[0]), Math.max(0.0625, view.size[1]), Math.max(0.0625, view.size[2])]);
-            host.refreshAssets();
-            host.refreshInspector();
-            return;
-          }
-          // the size of the placement: the scale that makes the component this big
+          // the scale that makes the component this big
           const s: Vec3 = [
             size[0] > 1e-6 ? Math.max(0.01, view.size[0] / size[0]) : 1,
             size[1] > 1e-6 ? Math.max(0.01, view.size[1] / size[1]) : 1,
@@ -263,39 +239,33 @@ export function buildModelInstanceInspector(host: PanelHost, obj: LevelModelInst
         case 'animationSpeed':
           obj.animation = view.animation;
           obj.animationSpeed = view.animationSpeed;
-          if (comp && !master) store.overrideInstance(obj.id, 'animation');
-          else mark('animation');
           break;
         case 'collide':
           obj.collide = view.collide;
-          if (comp && !master) store.overrideInstance(obj.id, 'collide');
-          else mark('collide');
           break;
         default:
           break;
       }
       host.touch(obj);
-      if (key === 'size' || key === 'animation' || key === 'collide') host.refreshInspector();
+      if (key === 'size') host.refreshInspector();
     }),
   );
 
   const row = (...children: HTMLElement[]) => el('div', { class: 'button-stack row' }, ...children);
   if (comp && model) {
-    const level = store.project.levels;
-    const count = instancesOf(level, model.id).length;
-    const master2 = store.masterOf(model.id);
+    const count = instancesOf(store.project.levels, model.id).length;
     host.inspector.append(
       el('div', { class: 'form-section', text: 'Component' }),
-      el('div', { class: 'empty muted', text: `${count} placement${count === 1 ? '' : 's'} in the game follow “${model.name}”.` }),
+      el('div', { class: 'empty muted', text: `“${model.name}” has ${count} placement${count === 1 ? '' : 's'} in the game; they all follow it.` }),
       row(
-        el('button', { class: 'btn component-btn', text: 'Open master in Models', title: 'Edit the shapes of the component', onclick: () => host.openModel(model.id) }),
-        ...(master || !master2 ? [] : [el('button', { class: 'btn', text: 'Select master', onclick: () => host.selectObject(master2.id) })]),
+        el('button', { class: 'btn component-btn', text: 'Edit the component', title: 'Its behavior, look and size are in the Assets', onclick: () => host.selectAsset(model.id) }),
+        el('button', { class: 'btn component-btn', text: 'Open in Models', title: 'Edit the shapes of the component', onclick: () => host.openModel(model.id) }),
       ),
       row(
         el('button', {
           class: 'btn',
           text: 'Detach',
-          title: 'Make this an ordinary object with shapes of its own: it stops following the component',
+          title: 'Make this an ordinary object with shapes and behavior of its own: it stops following the component',
           onclick: async () => {
             const ok = await appConfirm(`Detach this from “${model.name}”? It becomes an object with shapes of its own and no longer follows the component.`, {
               title: 'Detach instance',
@@ -308,46 +278,14 @@ export function buildModelInstanceInspector(host: PanelHost, obj: LevelModelInst
             }
           },
         }),
-        ...(!master && isOverridden(obj)
-          ? [
-              el('button', {
-                class: 'btn',
-                text: 'Reset to component',
-                title: 'Take the behavior (rules, solid, animation) of the component again',
-                onclick: () => {
-                  store.resetInstance(obj.id);
-                  host.refreshInspector();
-                },
-              }),
-            ]
-          : []),
       ),
     );
   } else {
-    host.inspector.append(
-      el('div', { class: 'button-stack' }, el('button', { class: 'btn', text: 'Edit model', onclick: () => host.openModel(obj.modelId) })),
-    );
+    host.inspector.append(el('div', { class: 'button-stack' }, el('button', { class: 'btn', text: 'Edit model', onclick: () => host.openModel(obj.modelId) })));
   }
 
   host.inspector.append(host.behaviorEditor(obj, (kind) => host.applyPreset(obj, kind)));
   if (!comp) host.inspector.append(buildMakeComponent(host, obj));
-  if (comp && !master && defaults && own('rules')) {
-    host.inspector.append(
-      el('div', { class: 'empty muted', text: 'The rules of this placement are set here, not by the component.' }),
-      el(
-        'div',
-        { class: 'button-stack' },
-        el('button', {
-          class: 'btn',
-          text: 'Use the rules of the component',
-          onclick: () => {
-            store.resetInstance(obj.id, 'rules');
-            host.refreshInspector();
-          },
-        }),
-      ),
-    );
-  }
 }
 
 /**
@@ -358,7 +296,6 @@ export function buildComponentInspector(host: PanelHost, model: Model): void {
   const { store } = host;
   const comp = isComponent(model);
   const placed = instancesOf(store.project.levels, model.id).length;
-  const defaults = modelDefaults(model);
   const dependents = store.dependents(model.id);
   const isVariant = !!model.variantOf;
   const base = isVariant ? store.getModel(model.variantOf!) : undefined;
@@ -369,7 +306,7 @@ export function buildComponentInspector(host: PanelHost, model: Model): void {
       ? componentBadge(
           isVariant
             ? `A variant of “${base?.name ?? 'a missing component'}”: its shapes, with a look and a behavior of its own.`
-            : 'A component: place it from here, and every instance follows what you change in it.',
+            : 'A component, the master: place it from here. Its shapes, look and behavior are edited here and in Models; every instance does the same.',
           'master',
         )
       : componentBadge('An ordinary model. Make it a component to place linked instances of it.', 'object'),
@@ -385,6 +322,18 @@ export function buildComponentInspector(host: PanelHost, model: Model): void {
       el('button', { class: 'btn primary', text: 'Place in level', onclick: () => host.placeModel(model.id, host.viewport.viewCenterPoint()) }),
       el('button', { class: 'btn component-btn', text: 'Edit in Models', onclick: () => host.openModel(model.id) }),
     ),
+    ...(comp && placed > 0
+      ? [
+          row(
+            el('button', {
+              class: 'btn',
+              text: 'Select its placements',
+              title: 'Select the instances of this component in the level being edited',
+              onclick: () => host.selectPlacements(model.id),
+            }),
+          ),
+        ]
+      : []),
   );
 
   if (comp) {
@@ -407,32 +356,27 @@ export function buildComponentInspector(host: PanelHost, model: Model): void {
     render();
     host.inspector.append(el('div', { class: 'form-section', text: 'Look' }), body);
 
-    // what a placement does until it says otherwise
-    const view = { collide: defaults.collide, animation: defaults.animation, animationSpeed: defaults.animationSpeed };
-    const ensureDefaults = () => {
-      model.defaults = { ...defaults, rules: model.defaults?.rules ?? defaults.rules, ...view };
-    };
-    host.inspector.append(
-      el('div', { class: 'form-section', text: 'Placements start like this' }),
-      buildForm(
-        [
-          { kind: 'bool', key: 'collide', label: 'Solid' },
-          {
-            kind: 'select',
-            key: 'animation',
-            label: 'Animation',
-            nullable: true,
-            noneLabel: 'None (still)',
-            options: model.clips.map((c) => ({ value: c.name, label: c.name })),
+    // a component of one shape has a size: every instance gets it (an instance is scaled from there)
+    if (model.cubes.length === 1) {
+      const view = { size: modelSize(model) };
+      host.inspector.append(
+        el('div', { class: 'form-section', text: 'Size' }),
+        buildForm(
+          [{ kind: 'vec3', key: 'size', label: 'Size', step: 0.5, unit: 'm', hint: 'The size of the shape of the component: every instance follows' }],
+          view as unknown as Record<string, unknown>,
+          () => {
+            const v = view.size;
+            store.resizeComponent(model.id, [Math.max(0.0625, v[0]), Math.max(0.0625, v[1]), Math.max(0.0625, v[2])]);
+            host.refreshAssets();
           },
-          { kind: 'number', key: 'animationSpeed', label: 'Anim speed', min: 0.1, max: 8, step: 0.1, unit: '×' },
-        ],
-        view as unknown as Record<string, unknown>,
-        () => {
-          ensureDefaults();
-          store.componentChanged(model.id, 'edit:defaults');
-        },
-      ),
+        ),
+      );
+    }
+
+    // what every instance does: one behavior, shared
+    host.inspector.append(
+      el('div', { class: 'form-section', text: 'Every instance does this' }),
+      buildDefaultsEditor(model, () => store.componentChanged(model.id, 'edit:defaults')),
       host.componentBehaviorEditor(model),
     );
   } else {

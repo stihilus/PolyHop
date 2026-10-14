@@ -104,28 +104,34 @@ Door preset is written: *locked* first, then *opens and uses the key*).
 ### Objects and components
 
 Everything you place is a **3D object**: a shape you added in the level, or a model. It is **yellow** in the scene list
-and in the Assets: an ordinary object, which belongs to its place. Select it and press **Make component** and it
-becomes a **master component** (**purple**, a filled diamond ◆) like a component of Figma or a prefab of Unity:
+and in the Assets: an ordinary object, which belongs to its place. Select it and press **Make component** and it becomes a
+**component** (**purple**), like a component of Figma or a prefab of Unity. The component is the master and it lives in
+the **Assets** and the **Models**, never in the level; the object you made it from stays where it is as an **instance**.
 
 | | What it is | Mark |
 | --- | --- | --- |
 | **Object** | an ordinary object: edit it in the Level with every tool (vertices, faces, size ...) or open it in Models | yellow ▣ (★ when it has rules) |
-| **Component** | the master, kept in the Assets; place it as many times as you like | purple card in the Assets |
-| **Master placement** | the placement a component was made from; it stays where it was | purple ◆ in the scene list |
-| **Instance** | a placement of a component: it follows every change of it | purple ◇ in the scene list |
+| **Component** | the master, kept in the Assets and the Models; place it as many times as you like | purple card ◆ in the Assets and Models |
+| **Instance** | a placement of a component in the level | purple ◇ in the scene list |
 | **Variant** | a component made from another one: the same shapes with a look and a behavior of its own | purple card, ◆⁺ |
 
-- **Place:** double-click an asset or drag it into the view; **Place in level** in the Assets. A component makes a linked
-  instance; an ordinary model placed a second time gets shapes of its own (a copy). Ctrl+D of an instance makes another
-  instance; of an ordinary object a copy with shapes of its own.
-- **Edit the master** in the Models tab (**Open master in Models** on any instance): every instance follows. The shapes of an
-  instance cannot be edited; it has its own place, turn, scale, size, tint, animation, solid and rules.
-- **Behavior is shared too.** What a component does by default (rules, solid, animation, and the size a placement starts at) is
-  edited on the master placement or in the component's properties (select it in the Assets): every instance follows,
-  except what an instance sets itself (marked *set here*; **Reset to component** takes it back).
-- **Edit in Models** (on a block in the level) turns it into an ordinary object made of a model, opened in the model editor to add more shapes to it.
-- **Detach** turns an instance into an ordinary object with shapes of its own. **Not a component** makes a model ordinary again.
-- **Size of a master** (a component of one shape) resizes the component: all instances follow, and a tile keeps its size.
+**A component has one behavior, and every instance does exactly that.** The rules, solid and animation are set on the
+component (in its properties in the Assets, or in the Models tab) and all its instances do the same; an instance cannot do
+something else. For something that does something else, make a **variant** (or **Detach** the instance). Deleting the
+placement in the level does not touch the component: it is always in the Assets.
+
+- **Place:** double-click an asset or drag it into the view; **Place in level** in the Assets. A component makes an instance;
+  an ordinary model placed a second time gets shapes of its own (a copy). Ctrl+D of an instance makes another instance; of
+  an ordinary object a copy with shapes of its own.
+- **Edit the component** (**Edit the component** on any instance, or select its card in the Assets): its look, size, solid,
+  animation and rules are there, and its shapes in the Models tab (**Open in Models**). Every instance follows at once.
+  The shapes of an instance cannot be edited; it has its own place, turn, scale, size and tint.
+- **Select its placements** (component properties) selects all instances in the level being edited.
+- **Detach** turns an instance into an ordinary object with shapes and behavior of its own. **Not a component** makes a model
+  ordinary again (its placements keep what they have). **Edit in Models** (on a block in the level) turns it into an ordinary
+  object made of a model, opened in the model editor to add more shapes to it.
+- **Size** of a component made of one shape is in its properties: every instance gets it. *Size* on an instance sets the
+  scale of that placement only. (A tile keeps its size either way.)
 - **Variants:** *Make variant* (component properties) creates a component with the shapes of the original and its own look
   (another tile or tint, another texture of the same layout) and behavior.
 - **Components inside components:** in Models, *Components inside > + Add a component…* places other components (the same

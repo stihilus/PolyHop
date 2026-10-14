@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   PRESET_MODEL_ID,
   builtInComponent,
-  clearOverride,
   componentFromBlock,
   componentFromInstance,
   cubesOfPart,
   dependenciesOf,
   dependentsOf,
   groundLift,
-  isOverridden,
+  followsComponent,
   makeVariant,
   makesCycle,
   modelDefaults,
@@ -19,7 +18,6 @@ import {
   presetOfModel,
   resolveModel,
   setMapping,
-  setOverride,
   syncInstances,
 } from '../src/core/components';
 import { ITEM_MODEL_IDS } from '../src/core/items';
@@ -118,7 +116,7 @@ describe('placing a component', () => {
   });
 });
 
-describe('instances follow the component, except for what they set themselves', () => {
+describe('a component does one thing, and so do its instances', () => {
   const setup = () => {
     const project = createDefaultProject();
     const coin = project.models.find((m) => m.id === ITEM_MODEL_IDS.coin)!;
@@ -141,42 +139,36 @@ describe('instances follow the component, except for what they set themselves', 
     }
   });
 
-  it('what an instance sets itself stays, until it follows again', () => {
+  it('an instance does exactly what its component does, and it is easy to tell when one does not', () => {
     const { project, coin, a, b } = setup();
+    expect(followsComponent(a, coin)).toBe(true);
     a.rules = [];
-    setOverride(a, 'rules');
-    coin.defaults!.collide = true;
+    expect(followsComponent(a, coin)).toBe(false);
+    // the next change of the component (or any sync) puts it right: there is only one behavior
     syncInstances(project.levels, coin, ids);
-    expect(a.rules).toEqual([]); // set here
-    expect(a.collide).toBe(true); // follows
-    expect(b.rules.length).toBeGreaterThan(0);
-    expect(isOverridden(a, 'rules')).toBe(true);
-    expect(isOverridden(a, 'collide')).toBe(false);
-    clearOverride(a, coin, ids, 'rules');
-    expect(isOverridden(a)).toBe(false);
+    expect(followsComponent(a, coin)).toBe(true);
     expect(a.rules.length).toBeGreaterThan(0);
-    expect(a.overrides).toBeUndefined();
+    expect(followsComponent(b, coin)).toBe(true);
   });
 
-  it('normalizes the marks of an instance', () => {
+  it('keeps the tint of an instance and forgets the marks of older versions', () => {
     const { a } = setup();
-    a.master = true;
     a.tint = '#112233';
-    a.overrides = ['rules', 'collide'];
-    const back = normalizeProject(JSON.parse(JSON.stringify({ ...createDefaultProject(), levels: [createLevelData('L', [a])] })));
+    const raw = JSON.parse(JSON.stringify({ ...createDefaultProject(), levels: [createLevelData('L', [a])] }));
+    raw.levels[0].objects[0].master = true;
+    raw.levels[0].objects[0].overrides = ['rules'];
+    const back = normalizeProject(raw);
     const o = back.levels[0]!.objects[0] as LevelModelInstance;
-    expect(o.master).toBe(true);
     expect(o.tint).toBe('#112233');
-    expect(o.overrides).toEqual(['rules', 'collide']);
-    const junk = normalizeProject({ version: 17, levels: [{ name: 'A', objects: [{ kind: 'model', modelId: 'x', overrides: ['nope'], tint: 'bad' }] }] });
-    const j = junk.levels[0]!.objects[0] as LevelModelInstance;
-    expect(j.overrides).toBeUndefined();
-    expect(j.tint).toBeUndefined();
+    expect((o as unknown as { master?: boolean }).master).toBeUndefined();
+    expect((o as unknown as { overrides?: unknown }).overrides).toBeUndefined();
+    const junk = normalizeProject({ version: 18, levels: [{ name: 'A', objects: [{ kind: 'model', modelId: 'x', tint: 'bad' }] }] });
+    expect((junk.levels[0]!.objects[0] as LevelModelInstance).tint).toBeUndefined();
   });
 });
 
 describe('making a component', () => {
-  it('a block becomes a one-shape tile-mapped component, and a master placement takes its place', () => {
+  it('a block becomes a one-shape tile-mapped component, and an instance of it takes its place', () => {
     const b = block();
     const { model, instance } = componentFromBlock(b, ids);
     expect(model.component).toBe(true);
@@ -190,7 +182,6 @@ describe('making a component', () => {
     expect(modelDefaults(model).rules).toHaveLength(b.rules.length);
     // the object stays where it was, with the same id
     expect(instance.id).toBe(b.id);
-    expect(instance.master).toBe(true);
     expect(instance.position).toEqual([2, 1, 3]);
     expect(instance.modelId).toBe(model.id);
   });
@@ -203,7 +194,7 @@ describe('making a component', () => {
     componentFromInstance(m, inst, ids);
     expect(m.component).toBe(true);
     expect(modelDefaults(m).collide).toBe(false);
-    expect(inst.master).toBe(true);
+    expect(followsComponent(inst, m)).toBe(true);
   });
 
   it('the store makes the block in the level a component, in one undo step, and keeps its id', () => {
@@ -217,7 +208,7 @@ describe('making a component', () => {
     const o = store.getObject(b.id)!;
     expect(o.kind).toBe('model');
     expect(o.kind === 'model' && o.modelId).toBe(modelId);
-    expect(store.masterOf(modelId)?.id).toBe(b.id);
+    expect(store.getModel(modelId)!.component).toBe(true);
     store.undoLevel();
     expect(store.getObject(b.id)!.kind).toBe('block');
   });
@@ -233,7 +224,6 @@ describe('making a component', () => {
     expect(model.mapping).toBe('tile');
     const o = store.getObject(b.id) as LevelModelInstance;
     expect(o.kind).toBe('model');
-    expect(o.master).toBeUndefined();
     expect(o.position).toEqual([2, 1, 3]);
     // asking again for a placement of a model gives its model
     expect(store.makeObjectModel(b.id)).toBe(id);
@@ -274,17 +264,15 @@ describe('placing, copying and detaching in the store', () => {
     expect(project.models.filter((m) => m.name === 'Crate')).toHaveLength(2);
   });
 
-  it('a copy of an instance is an instance, never a master; a copy of an ordinary object has shapes of its own', () => {
+  it('a copy of an instance is an instance; a copy of an ordinary object has shapes of its own', () => {
     const { project, store } = stage();
     const coin = project.models.find((m) => m.id === ITEM_MODEL_IDS.coin)!;
-    const master = placeInstance(coin, [0, 0, 0], ids);
-    master.master = true;
-    store.addObject(master);
-    store.duplicateObjects([master.id]);
-    const copies = store.objects.filter((o) => o.id !== master.id && o.kind === 'model') as LevelModelInstance[];
+    const first = placeInstance(coin, [0, 0, 0], ids);
+    store.addObject(first);
+    store.duplicateObjects([first.id]);
+    const copies = store.objects.filter((o) => o.id !== first.id && o.kind === 'model') as LevelModelInstance[];
     expect(copies).toHaveLength(1);
     expect(copies[0]!.modelId).toBe(coin.id);
-    expect(copies[0]!.master).toBeUndefined();
 
     const plain = crate();
     store.addModel(plain);
@@ -300,7 +288,6 @@ describe('placing, copying and detaching in the store', () => {
     const { project, store } = stage();
     const coin = project.models.find((m) => m.id === ITEM_MODEL_IDS.coin)!;
     const inst = placeInstance(coin, [0, 0, 0], ids);
-    inst.overrides = ['rules'];
     store.addObject(inst);
     expect(store.detachInstance(inst.id)).toBe(true);
     const o = store.getObject(inst.id) as LevelModelInstance;
@@ -308,7 +295,7 @@ describe('placing, copying and detaching in the store', () => {
     const own = store.getModel(o.modelId)!;
     expect(own.component).toBeUndefined();
     expect(own.cubes.length).toBe(coin.cubes.length);
-    expect(o.overrides).toBeUndefined();
+    expect(o.rules.length).toBe(inst.rules.length);
   });
 
   it('deleting a model takes it out of the variants and holders made from it', () => {
@@ -327,7 +314,7 @@ describe('placing, copying and detaching in the store', () => {
 });
 
 describe('editing a component in the level', () => {
-  it('resizing a one-shape master resizes the component, and undo gives the size back', () => {
+  it('resizing a one-shape component resizes it for every instance, and undo gives the size back', () => {
     const project = createDefaultProject();
     const b = block();
     b.collide = true;
@@ -570,10 +557,10 @@ describe('older projects', () => {
     expect(mine.component).toBe(true);
     expect(mine.mapping).toBe('tile');
     expect(modelSize(mine)).toEqual([5, 1, 1]);
-    // nothing in the level changed: the instance keeps its own behavior, the block stays a block
+    // nothing in the level changed: the instance has what it had, the block stays a block
     const inst = p.levels[0]!.objects[0] as LevelModelInstance;
     expect(inst.rules.length).toBe(coinRules.length);
-    expect(inst.overrides).toEqual(['rules', 'collide', 'animation']);
+    expect(inst.modelId).toBe(ITEM_MODEL_IDS.coin);
     expect(p.levels[0]!.objects[1]!.kind).toBe('block');
     expect((p.levels[0]!.objects[1] as unknown as { prefab?: string }).prefab).toBeUndefined();
   });
@@ -581,5 +568,58 @@ describe('older projects', () => {
   it('an exported game does not get the editor components back', () => {
     const game = normalizeProject({ version: 16, exported: true, models: [], levels: [{ name: 'A', objects: [] }] });
     expect(game.models.every((m) => m.id === 'humanoid')).toBe(true);
+  });
+});
+
+describe('a component has one behavior (version 18)', () => {
+  const coinObject = (id: string, rules: unknown, collide = false) => ({
+    kind: 'model',
+    id,
+    name: 'Coin',
+    modelId: ITEM_MODEL_IDS.coin,
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+    animation: 'spin',
+    animationSpeed: 1,
+    collide,
+    rules,
+  });
+
+  it('instances that do what the component does stay instances; one that does something else becomes an object of its own', () => {
+    const coin = builtInComponent('coin', ids);
+    const same = JSON.parse(JSON.stringify(coin.defaults!.rules));
+    const raw = {
+      ...JSON.parse(JSON.stringify(createDefaultProject())),
+      version: 17,
+      levels: [
+        {
+          name: 'A',
+          objects: [
+            coinObject('a', same),
+            coinObject('b', same),
+            // set by itself in version 17: no rules at all
+            { ...coinObject('c', []), master: true, overrides: ['rules'] },
+            { ...coinObject('d', []), overrides: ['rules'] },
+          ],
+        },
+      ],
+    };
+    const p = normalizeProject(raw);
+    const by = new Map(p.levels[0]!.objects.map((o) => [o.id, o as LevelModelInstance]));
+    expect(by.get('a')!.modelId).toBe(ITEM_MODEL_IDS.coin);
+    expect(by.get('b')!.modelId).toBe(ITEM_MODEL_IDS.coin);
+    // the two without rules did the same, so they share one object of their own
+    expect(by.get('c')!.modelId).not.toBe(ITEM_MODEL_IDS.coin);
+    expect(by.get('c')!.modelId).toBe(by.get('d')!.modelId);
+    const own = p.models.find((m) => m.id === by.get('c')!.modelId)!;
+    expect(own.component).toBeUndefined();
+    expect(own.cubes.length).toBe(p.models.find((m) => m.id === ITEM_MODEL_IDS.coin)!.cubes.length);
+    expect(by.get('c')!.rules).toEqual([]);
+    // and the component is still the component
+    expect(p.models.find((m) => m.id === ITEM_MODEL_IDS.coin)!.component).toBe(true);
+    // a project that is already at version 18 is left as it is
+    const again = normalizeProject(JSON.parse(JSON.stringify(p)));
+    expect(again.levels[0]!.objects.map((o) => (o as LevelModelInstance).modelId)).toEqual(p.levels[0]!.objects.map((o) => (o as LevelModelInstance).modelId));
   });
 });

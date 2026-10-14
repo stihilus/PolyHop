@@ -38,6 +38,8 @@ export interface PanelHost {
   selectAsset(modelId: string | null): void;
   /** Select an object of the level. */
   selectObject(id: string): void;
+  /** Select the placements of a component in the level being edited. */
+  selectPlacements(modelId: string): void;
   placeModel(id: string, position: Vec3): void;
   /** The object (a block or a model placement) becomes a component and stays where it is as its master. */
   makeComponent(objectId: string): void;

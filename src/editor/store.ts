@@ -1,7 +1,6 @@
 import { normalizeVariables, renameVariableInRules } from '../core/logic';
 import { type SkyPreset, normalizeLook } from '../core/look';
 import {
-  clearOverride,
   componentFromBlock,
   componentFromInstance,
   dependentsOf,
@@ -9,7 +8,6 @@ import {
   isComponent,
   makeVariant,
   placeInstance,
-  setOverride,
   syncInstances,
   builtInComponent,
   presetOfModel,
@@ -19,7 +17,6 @@ import { renameBoneInModel } from '../core/rig';
 import {
   DEFAULT_SKY,
   type LevelData,
-  type InstanceOverride,
   type LevelModelInstance,
   type LevelObject,
   type Model,
@@ -430,8 +427,7 @@ export class Store {
       copy.name = `${src.name} copy`;
       copy.position = [src.position[0] + 1, src.position[1], src.position[2] + 1];
       if (copy.kind === 'model') {
-        // a copy of an instance is another instance (never a master); a copy of a plain object has shapes of its own
-        delete copy.master;
+        // a copy of an instance is another instance; a copy of a plain object has shapes of its own
         const model = this.getModel(copy.modelId);
         if (model && !isComponent(model)) {
           const own = cloneModel(model);
@@ -538,8 +534,9 @@ export class Store {
   // ---------------------------------------------------------------- components
 
   /**
-   * The object becomes a component: a block turns into a one-shape model, a model placement makes its model one.
-   * The object stays where it is as the master placement. Returns the id of the component, or null when it cannot be one.
+   * The object becomes a component: a block turns into a one-shape model, a model placement makes its model one. The
+   * component lives in the Assets and the Models; the object stays where it is, as an instance of it. Returns the id of
+   * the component, or null when it cannot be one.
    */
   makeComponent(objectId: string): string | null {
     const obj = this.getObject(objectId);
@@ -589,10 +586,7 @@ export class Store {
     const m = this.getModel(modelId);
     if (!m || isComponent(m) === on) return;
     if (on) m.component = true;
-    else {
-      delete m.component;
-      for (const inst of instancesOf(this.project.levels, modelId)) delete inst.master;
-    }
+    else delete m.component;
     this.commitLevel('component');
     this.emit({ type: 'components-changed', id: modelId });
   }
@@ -628,24 +622,6 @@ export class Store {
     return v.id;
   }
 
-  /** The instance sets this itself from now on. */
-  overrideInstance(objectId: string, key: InstanceOverride): void {
-    const o = this.getObject(objectId);
-    if (!o || o.kind !== 'model') return;
-    setOverride(o, key);
-  }
-
-  /** The instance follows its component again (for one thing, or for everything). */
-  resetInstance(objectId: string, key?: InstanceOverride): void {
-    const o = this.getObject(objectId);
-    if (!o || o.kind !== 'model') return;
-    const m = this.getModel(o.modelId);
-    if (!m) return;
-    clearOverride(o, m, newId, key);
-    this.emit({ type: 'object-changed', id: o.id });
-    this.commitLevel('reset-instance');
-  }
-
   /** The instance becomes an object of its own: it gets shapes of its own and no longer follows the component. */
   detachInstance(objectId: string): boolean {
     const o = this.getObject(objectId);
@@ -657,17 +633,17 @@ export class Store {
     delete own.component;
     this.project.models.push(own);
     o.modelId = own.id;
-    delete o.master;
-    delete o.overrides;
     this.emit({ type: 'model-added', id: own.id });
     this.emit({ type: 'object-changed', id: o.id });
     this.commitLevel('detach');
     return true;
   }
 
-  /** The master placement of a component in the level being edited, if there is one. */
-  masterOf(modelId: string): LevelModelInstance | undefined {
-    return instancesOf(this.project.levels, modelId).find((o) => o.master === true);
+  /** Select the placements of a component in the level being edited. Returns how many there are. */
+  selectInstancesOf(modelId: string): number {
+    const ids = this.objects.filter((o) => o.kind === 'model' && o.modelId === modelId).map((o) => o.id);
+    if (ids.length > 0) this.selectObjects(ids);
+    return ids.length;
   }
 
   /** A built-in component back to how it came (shapes, look and behavior). */

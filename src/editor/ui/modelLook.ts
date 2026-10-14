@@ -1,10 +1,11 @@
 // The look of a model: how its faces take their picture from the texture (one tile repeated, or every face with its
 // own UV), and the tint. Shared by the component panel of the Level and the model editor.
 
-import { isTiled, modelLook, setMapping } from '../../core/components';
+import { isTiled, modelDefaults, modelLook, setMapping } from '../../core/components';
 import type { Model, ModelLook } from '../../core/types';
 import type { TextureLibrary } from '../../runtime/textures';
 import { el } from './dom';
+import { buildForm } from './form';
 import { buildTilePicker } from './tilePicker';
 
 export interface ModelLookOptions {
@@ -20,6 +21,34 @@ export interface ModelLookOptions {
 export function componentBadge(text: string, kind: 'master' | 'instance' | 'object'): HTMLElement {
   const mark = kind === 'master' ? '◆' : kind === 'instance' ? '◇' : '▣';
   return el('div', { class: `component-badge component-${kind}` }, el('span', { class: 'component-mark', text: mark }), el('span', { text }));
+}
+
+/**
+ * What every instance of a component does: solid, and the animation it plays. (The rules are edited in a behavior
+ * editor next to it.) `onChange` runs after a change, with the defaults of the model already updated.
+ */
+export function buildDefaultsEditor(model: Model, onChange: () => void): HTMLElement {
+  const d = modelDefaults(model);
+  const view = { collide: d.collide, animation: d.animation, animationSpeed: d.animationSpeed };
+  return buildForm(
+    [
+      { kind: 'bool', key: 'collide', label: 'Solid' },
+      {
+        kind: 'select',
+        key: 'animation',
+        label: 'Animation',
+        nullable: true,
+        noneLabel: 'None (still)',
+        options: model.clips.map((c) => ({ value: c.name, label: c.name })),
+      },
+      { kind: 'number', key: 'animationSpeed', label: 'Anim speed', min: 0.1, max: 8, step: 0.1, unit: '×' },
+    ],
+    view as unknown as Record<string, unknown>,
+    () => {
+      model.defaults = { ...modelDefaults(model), rules: model.defaults?.rules ?? [], ...view };
+      onChange();
+    },
+  );
 }
 
 const row = (label: string, ...controls: HTMLElement[]) =>
