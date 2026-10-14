@@ -1,13 +1,28 @@
 import { ACTION_LABELS, keyLabel } from '../../core/keys';
 import {
+  DEFAULT_MENU,
+  LOGO_MAX_HEIGHT,
+  LOGO_MAX_WIDTH,
+  MAX_LABEL_CHARS,
+  MAX_LOGO_CHARS,
+  MAX_LOGO_SIZE,
+  MIN_LOGO_SIZE,
+  type MenuScreen,
+  normalizeMenu,
+  resolveMenu,
+} from '../../core/menu';
+import {
   DEFAULT_SPLASH_SECONDS,
   MAX_SPLASH_CHARS,
   MAX_SPLASH_SECONDS,
   MIN_SPLASH_SECONDS,
-  fitSplash,
+  SPLASH_MAX_HEIGHT,
+  SPLASH_MAX_WIDTH,
+  fitWithin,
   isImageDataUrl,
 } from '../../core/splash';
 import { ACTIONS, DEFAULT_CONTROLS, RENDER_SCALES } from '../../core/types';
+import { menuBackdrop, menuContent } from '../../runtime/menu';
 import { showSplash } from '../../runtime/splash';
 import type { Store } from '../store';
 import { el } from './dom';
@@ -15,29 +30,55 @@ import { type Field, buildForm } from './form';
 
 export { keyLabel };
 
-const SETTINGS_FIELDS: Field[] = [
+const GAME_FIELDS: Field[] = [
   { kind: 'section', label: 'Project' },
-  { kind: 'text', key: 'name', label: 'Game title', hint: 'Shown as the page title of the exported game' },
+  { kind: 'text', key: 'name', label: 'Game title', hint: 'Shown as the page title of the exported game, and on the menu when there is no logo' },
   { kind: 'bool', key: 'fullscreen', label: 'Start fullscreen', hint: 'Requests fullscreen when the game starts' },
-  { kind: 'section', label: 'Input' },
+];
+
+const INPUT_FIELDS: Field[] = [
+  { kind: 'section', label: 'Mouse and gamepad' },
   { kind: 'number', key: 'mouseSensitivity', label: 'Mouse sensitivity', min: 0.1, max: 5, step: 0.1 },
   { kind: 'bool', key: 'invertY', label: 'Invert camera Y' },
   { kind: 'bool', key: 'gamepad', label: 'Gamepad support' },
 ];
 
-/** The project settings form; the music list comes from the project's sounds. */
-function settingsFields(store: Store): Field[] {
+/** The sound form; the music list comes from the project's sounds. */
+function soundFields(store: Store): Field[] {
   const music = store.project.sounds.filter((s) => s.kind !== 'sfx').map((s) => ({ value: s.id, label: s.name }));
   return [
-    ...SETTINGS_FIELDS,
     { kind: 'section', label: 'Sound' },
     { kind: 'select', key: 'music', label: 'Music', nullable: true, noneLabel: 'None', options: music, hint: 'A loop that plays while the game runs. Make one in the Audio tab.' },
     { kind: 'number', key: 'volume', label: 'Volume', min: 0, max: 1, step: 0.1, hint: 'Master volume of the whole game' },
   ];
 }
 
-/** Read a picture file as a data URL that fits the limits of a splash screen (brought down in size when it is big). */
-async function readSplashFile(file: File): Promise<string> {
+const MENU_FIELDS: Field[] = [
+  { kind: 'section', label: 'Look' },
+  { kind: 'number', key: 'logoSize', label: 'Logo size', min: MIN_LOGO_SIZE, max: MAX_LOGO_SIZE, step: 5, unit: '%', hint: 'How much of the width of the screen the logo may take' },
+  {
+    kind: 'select',
+    key: 'background',
+    label: 'Background',
+    options: [
+      { value: 'dim', label: 'The game, dimmed' },
+      { value: 'color', label: 'One color' },
+      { value: 'picture', label: 'A picture' },
+    ],
+    hint: 'What is behind the menu when the game starts. A paused game always shows the menu over the dimmed game.',
+  },
+  { kind: 'color', key: 'backgroundColor', label: 'Color', hint: 'The color behind the menu (also around a picture that does not fill the screen)' },
+  { kind: 'color', key: 'accent', label: 'Buttons', hint: 'The color of the buttons of the menu and of the settings screen' },
+  { kind: 'section', label: 'Buttons' },
+  { kind: 'text', key: 'startLabel', label: 'First button', hint: `What the button that starts the game says (up to ${MAX_LABEL_CHARS} letters). While paused it says Continue.` },
+  { kind: 'text', key: 'settingsLabel', label: 'Second button', hint: 'What the button that opens the settings of the player says' },
+];
+
+/**
+ * Read a picture file as a data URL that fits a limit of size (brought down when it is big, as a PNG, or as a JPEG
+ * when even that is too heavy). A pixel picture stays crisp when it is made smaller by little.
+ */
+async function readPicture(file: File, maxWidth: number, maxHeight: number, maxChars: number): Promise<string> {
   const original = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -50,21 +91,32 @@ async function readSplashFile(file: File): Promise<string> {
     img.onerror = () => reject(new Error('this file is not a picture the browser can show'));
     img.src = original;
   });
-  const fit = fitSplash(img.naturalWidth, img.naturalHeight);
+  const fit = fitWithin(img.naturalWidth, img.naturalHeight, maxWidth, maxHeight);
   const small = fit.width === img.naturalWidth && fit.height === img.naturalHeight;
-  if (small && isImageDataUrl(original)) return original;
+  if (small && isImageDataUrl(original, maxChars)) return original;
   const canvas = document.createElement('canvas');
   canvas.width = fit.width;
   canvas.height = fit.height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('could not resize the picture');
-  ctx.imageSmoothingEnabled = fit.width * 2 > img.naturalWidth; // a pixel picture stays crisp when it is made smaller by little
+  ctx.imageSmoothingEnabled = fit.width * 2 > img.naturalWidth;
   ctx.drawImage(img, 0, 0, fit.width, fit.height);
   const png = canvas.toDataURL('image/png');
-  const out = png.length > MAX_SPLASH_CHARS * 0.8 ? canvas.toDataURL('image/jpeg', 0.88) : png;
-  if (!isImageDataUrl(out)) throw new Error('the picture is too big: use a smaller one');
+  const out = png.length > maxChars * 0.8 ? canvas.toDataURL('image/jpeg', 0.88) : png;
+  if (!isImageDataUrl(out, maxChars)) throw new Error('the picture is too big: use a smaller one');
   return out;
 }
+
+type TabId = 'general' | 'menu' | 'splash' | 'controls' | 'sound';
+const TABS: [TabId, string][] = [
+  ['general', 'General'],
+  ['menu', 'Menu'],
+  ['splash', 'Splash'],
+  ['controls', 'Controls'],
+  ['sound', 'Sound'],
+];
+/** The tab that was open last, so the dialog comes back where it was left. */
+let lastTab: TabId = 'general';
 
 export function openSettingsDialog(store: Store): void {
   const settings = store.project.settings;
@@ -157,7 +209,7 @@ export function openSettingsDialog(store: Store): void {
       const f = file.files?.[0];
       if (!f) return;
       try {
-        const image = await readSplashFile(f);
+        const image = await readPicture(f, SPLASH_MAX_WIDTH, SPLASH_MAX_HEIGHT, MAX_SPLASH_CHARS);
         settings.splash = {
           image,
           seconds: settings.splash?.seconds ?? DEFAULT_SPLASH_SECONDS,
@@ -218,17 +270,153 @@ export function openSettingsDialog(store: Store): void {
   };
   renderSplash();
 
-  dialog.append(
-    el('div', { class: 'modal-title' }, el('span', { text: 'Project Settings' }), el('button', { class: 'icon-btn', text: '✕', onclick: close })),
-    buildForm(settingsFields(store), settings as unknown as Record<string, unknown>, () => store.settingsChanged()),
+  // ---- menu screen: a logo and the buttons under it
+  const menuDraft: MenuScreen = resolveMenu(settings.menu);
+  const menuBox = el('div', { class: 'menu-settings' });
+  const stage = el('div', { class: 'menu-stage' });
+  const stageFrame = el('div', { class: 'menu-preview' }, stage);
+  const fitStage = () => {
+    const w = stageFrame.clientWidth;
+    if (w > 0) stage.style.transform = `scale(${w / 1280})`;
+  };
+  new ResizeObserver(fitStage).observe(stageFrame);
+  /** The preview shows what the player will see first (1280 x 720, made smaller to fit). */
+  const renderMenuPreview = () => {
+    stage.replaceChildren();
+    const layer = el('div', { class: 'menu-layer' });
+    Object.assign(layer.style, menuBackdrop(menuDraft, false), { display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: '#fff' });
+    layer.append(
+      menuContent({
+        menu: menuDraft,
+        title: settings.name,
+        paused: false,
+        onStart: () => undefined,
+        onSettings: () => undefined,
+        onFullscreen: () => undefined,
+      }),
+    );
+    stage.append(layer);
+    fitStage();
+  };
+  const commitMenu = () => {
+    const clean = normalizeMenu(menuDraft);
+    if (clean) settings.menu = clean;
+    else delete settings.menu;
+    store.settingsChanged();
+    renderMenuPreview();
+  };
+  /** A picture picker: a button that opens the file dialog and a button that takes the picture away. */
+  const pictureRow = (label: string, has: () => boolean, limits: { w: number; h: number; chars: number }, set: (url: string | undefined) => void, note: string) => {
+    const file = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp' });
+    file.style.display = 'none';
+    const status = el('span', { class: 'muted', text: has() ? 'Set' : 'None' });
+    const choose = el('button', { class: 'btn', text: has() ? 'Change…' : 'Choose…', onclick: () => file.click() });
+    const remove = el('button', {
+      class: 'btn danger',
+      text: 'Remove',
+      onclick: () => {
+        set(undefined);
+        commitMenu();
+        renderMenuControls();
+      },
+    });
+    remove.disabled = !has();
+    file.addEventListener('change', async () => {
+      const f = file.files?.[0];
+      file.value = '';
+      if (!f) return;
+      try {
+        set(await readPicture(f, limits.w, limits.h, limits.chars));
+        commitMenu();
+        renderMenuControls();
+      } catch (err) {
+        alert(`Could not use this picture: ${err instanceof Error ? err.message : err}`);
+      }
+    });
+    return el(
+      'div',
+      { class: 'picture-row', title: note },
+      el('span', { class: 'form-label', text: label }),
+      el('span', { class: 'picture-row-controls' }, status, choose, remove, file),
+    );
+  };
+  const menuControls = el('div', { class: 'menu-controls' });
+  const renderMenuControls = () => {
+    menuControls.replaceChildren();
+    menuControls.append(
+      pictureRow(
+        'Logo',
+        () => !!menuDraft.logo,
+        { w: LOGO_MAX_WIDTH, h: LOGO_MAX_HEIGHT, chars: MAX_LOGO_CHARS },
+        (url) => {
+          if (url) menuDraft.logo = url;
+          else delete menuDraft.logo;
+        },
+        'A picture with the name of your game, shown over the buttons. Up to 1024 × 512. Without one, the title of the game is written out.',
+      ),
+      buildForm(MENU_FIELDS.slice(0, 3), menuDraft as unknown as Record<string, unknown>, (key) => {
+        commitMenu();
+        if (key === 'background') renderMenuControls();
+      }),
+    );
+    if (menuDraft.background === 'picture') {
+      menuControls.append(
+        pictureRow(
+          'Picture',
+          () => !!menuDraft.backgroundImage,
+          { w: SPLASH_MAX_WIDTH, h: SPLASH_MAX_HEIGHT, chars: MAX_SPLASH_CHARS },
+          (url) => {
+            if (url) menuDraft.backgroundImage = url;
+            else {
+              delete menuDraft.backgroundImage;
+              menuDraft.background = 'dim';
+            }
+          },
+          'Fills the screen behind the menu. Up to 1280 × 720.',
+        ),
+      );
+    }
+    menuControls.append(
+      buildForm(MENU_FIELDS.slice(3), menuDraft as unknown as Record<string, unknown>, () => commitMenu()),
+      el('div', { class: 'button-stack row' }, el('button', {
+        class: 'btn',
+        text: 'Reset the menu',
+        title: 'Back to the plain menu: the title, Start game and Settings',
+        onclick: () => {
+          Object.assign(menuDraft, DEFAULT_MENU);
+          delete menuDraft.logo;
+          delete menuDraft.backgroundImage;
+          commitMenu();
+          renderMenuControls();
+        },
+      })),
+    );
+  };
+  menuBox.append(
+    el('div', { class: 'muted menu-note', text: 'The first screen of the exported game: your logo, and under it Start game and Settings. The player’s own settings (volume, mouse, keys) open from the Settings button.' }),
+    stageFrame,
+    menuControls,
+  );
+  renderMenuControls();
+  renderMenuPreview();
+
+  // ---- the tabs
+  const generalPanel = el(
+    'div',
+    { class: 'settings-panel' },
+    buildForm(GAME_FIELDS, settings as unknown as Record<string, unknown>, () => store.settingsChanged()),
     buildForm(graphicsFields, graphics as unknown as Record<string, unknown>, () => {
       const n = parseFloat(graphics.renderScale);
       settings.renderScale = RENDER_SCALES.includes(n) ? n : 1;
       store.settingsChanged();
     }),
-    el('div', { class: 'form-section', text: 'Splash screen' }),
-    splashBox,
-    el('div', { class: 'form-section', text: 'Controls' }),
+  );
+  const splashPanel = el('div', { class: 'settings-panel' }, el('div', { class: 'form-section', text: 'Splash screen' }), splashBox);
+  const controlsPanel = el(
+    'div',
+    { class: 'settings-panel' },
+    buildForm(INPUT_FIELDS, settings as unknown as Record<string, unknown>, () => store.settingsChanged()),
+    el('div', { class: 'form-section', text: 'Keys' }),
     controlsTable,
     el(
       'div',
@@ -245,5 +433,35 @@ export function openSettingsDialog(store: Store): void {
       }),
     ),
   );
+  const soundPanel = el(
+    'div',
+    { class: 'settings-panel' },
+    buildForm(soundFields(store), settings as unknown as Record<string, unknown>, () => store.settingsChanged()),
+  );
+  const panels: Record<TabId, HTMLElement> = { general: generalPanel, menu: menuBox, splash: splashPanel, controls: controlsPanel, sound: soundPanel };
+  const tabBar = el('div', { class: 'tabs modal-tabs' });
+  const tabButtons = new Map<TabId, HTMLElement>();
+  const showTab = (id: TabId) => {
+    lastTab = id;
+    for (const [tabId, panel] of Object.entries(panels) as [TabId, HTMLElement][]) panel.classList.toggle('hidden', tabId !== id);
+    for (const [tabId, b] of tabButtons) b.classList.toggle('active', tabId === id);
+    if (id === 'menu') fitStage();
+  };
+  for (const [id, label] of TABS) {
+    const b = el('button', { class: 'tab', text: label, onclick: () => showTab(id) });
+    tabButtons.set(id, b);
+    tabBar.append(b);
+  }
+
+  dialog.append(
+    el('div', { class: 'modal-title' }, el('span', { text: 'Project Settings' }), el('button', { class: 'icon-btn', text: '✕', onclick: close })),
+    tabBar,
+    generalPanel,
+    menuBox,
+    splashPanel,
+    controlsPanel,
+    soundPanel,
+  );
   document.body.append(backdrop);
+  showTab(lastTab);
 }

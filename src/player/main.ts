@@ -3,9 +3,11 @@
 
 import * as THREE from 'three';
 import { ACTION_LABELS, keyLabel } from '../core/keys';
+import { resolveMenu } from '../core/menu';
 import { ACTIONS, type Action, normalizeProject } from '../core/types';
 import { createEnvironment } from '../runtime/environment';
 import { Game } from '../runtime/game';
+import { menuBackdrop, menuContent } from '../runtime/menu';
 import {
   type Controls,
   type PlayerPrefs,
@@ -20,7 +22,7 @@ import {
 import { TextureLibrary } from '../runtime/textures';
 import { showSplash } from '../runtime/splash';
 import { TouchControls, wantsTouchControls } from '../runtime/touch';
-import { button, div } from './dom';
+import { div, setAccent } from './dom';
 import { createSettingsMenu } from './settingsMenu';
 
 interface PlayerOptions {
@@ -49,6 +51,9 @@ async function main(): Promise<void> {
   }
   const project = normalizeProject(rawProject);
   document.title = project.settings.name;
+  // the menu screen the author made (a logo, the buttons, the colors)
+  const menu = resolveMenu(project.settings.menu);
+  setAccent(menu.accent);
 
   // the splash screen comes first, before the game is built (which takes a moment in a big level)
   if (project.settings.splash) {
@@ -156,7 +161,7 @@ async function main(): Promise<void> {
       settingsMenu.refresh();
     },
     back: () => showOverlay(overlayPaused),
-  });
+  }, menu.settingsLabel);
   const showSettings = () => {
     overlay.replaceChildren(settingsMenu.element);
     settingsMenu.refresh();
@@ -172,17 +177,24 @@ async function main(): Promise<void> {
   };
 
   let started = false;
+  const toggleFullscreen = () => void (document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen?.());
   const showOverlay = (paused: boolean) => {
     overlayPaused = paused;
     touch?.hide();
     overlay.replaceChildren();
     overlay.style.display = 'flex';
-    overlay.append(
-      div({ fontSize: '40px', margin: '0 0 6px' }, project.settings.name),
-      div({ fontSize: '16px', color: '#9aa3b2', margin: '0 0 18px' }, paused ? 'Paused' : 'Ready'),
-    );
+    Object.assign(overlay.style, menuBackdrop(menu, paused));
+    const content = menuContent({
+      menu,
+      title: project.settings.name,
+      paused,
+      onStart: start,
+      onSettings: showSettings,
+      onFullscreen: toggleFullscreen,
+    });
+    overlay.append(content);
     if (options.showControls) {
-      const table = div({ fontSize: '14px', color: '#cfd5e0', margin: '0 0 18px', lineHeight: '1.7' });
+      const table = div({ fontSize: '14px', color: '#cfd5e0', margin: '22px 0 0', lineHeight: '1.7' });
       if (game.touchMode) {
         table.append(div({}, 'Left side: move'), div({}, 'Right side: look around'), div({ color: '#9aa3b2' }, 'Buttons: Jump, Use, Run, Duck'));
       } else {
@@ -192,16 +204,8 @@ async function main(): Promise<void> {
         }
         table.append(div({ color: '#9aa3b2' }, 'Mouse: turn / look · M: sound on / off'));
       }
-      overlay.append(table);
+      content.append(table);
     }
-    overlay.append(
-      button(paused ? 'Continue' : 'Play', start),
-      div(
-        { display: 'flex', flexWrap: 'wrap', justifyContent: 'center' },
-        button('Settings', showSettings, true),
-        button('Fullscreen', () => void (document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen?.()), true),
-      ),
-    );
   };
 
   const lockMouse = () => {

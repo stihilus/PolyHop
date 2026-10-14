@@ -4,7 +4,7 @@
 import { ACTION_LABELS, keyLabel } from '../core/keys';
 import { ACTIONS, type Action, RENDER_SCALES } from '../core/types';
 import { RESERVED_KEYS, SENSITIVITY_MAX, SENSITIVITY_MIN } from '../runtime/prefs';
-import { button, div } from './dom';
+import { button, div, getAccent } from './dom';
 
 export interface SettingsValues {
   volume: number;
@@ -50,7 +50,7 @@ function slider(min: number, max: number, value: number, onInput: (v: number) =>
   input.step = '1';
   input.value = String(Math.round(value));
   input.style.width = '150px';
-  input.style.accentColor = '#ffb23e';
+  input.style.accentColor = getAccent();
   const out = document.createElement('span');
   out.style.cssText = 'min-width:44px;text-align:right;color:#9aa3b2;font-size:14px';
   out.textContent = `${input.value}%`;
@@ -65,7 +65,7 @@ function checkbox(checked: boolean, onChange: (v: boolean) => void): HTMLInputEl
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.checked = checked;
-  input.style.accentColor = '#ffb23e';
+  input.style.accentColor = getAccent();
   input.style.width = '18px';
   input.style.height = '18px';
   input.addEventListener('change', () => onChange(input.checked));
@@ -79,7 +79,7 @@ export interface SettingsMenu {
 }
 
 /** Build the screen. It rebuilds itself after a key was picked. */
-export function createSettingsMenu(host: SettingsHost): SettingsMenu {
+export function createSettingsMenu(host: SettingsHost, title = 'Settings'): SettingsMenu {
   const panel = div({
     width: 'min(440px, 92vw)',
     maxHeight: '86vh',
@@ -100,7 +100,7 @@ export function createSettingsMenu(host: SettingsHost): SettingsMenu {
     const v = host.values();
     const touch = host.touch();
     panel.replaceChildren();
-    panel.append(div({ fontSize: '24px', margin: '0 0 8px', textAlign: 'center' }, 'Settings'));
+    panel.append(div({ fontSize: '24px', margin: '0 0 8px', textAlign: 'center' }, title));
 
     panel.append(
       row('Volume', slider(0, 100, v.volume * 100, (n) => host.change({ volume: n / 100 }))),
@@ -134,7 +134,7 @@ export function createSettingsMenu(host: SettingsHost): SettingsMenu {
         panel.append(row(ACTION_LABELS[action], b));
       }
     }
-    panel.append(div({ minHeight: '20px', margin: '6px 0 0', color: '#ffb23e', fontSize: '13px', textAlign: 'center' }, note));
+    panel.append(div({ minHeight: '20px', margin: '6px 0 0', color: getAccent(), fontSize: '13px', textAlign: 'center' }, note));
     note = '';
 
     panel.append(div({ display: 'flex', justifyContent: 'center', marginTop: '6px' }, button('Back', host.back), button('Defaults', host.reset, true)));

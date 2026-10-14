@@ -180,7 +180,7 @@ renaming and deleting levels too.
   ticked is a body of water (set it not Solid): the picture flows slowly, the player swims in it. Swimming: holding
   **Jump** swims up (a jump press at the surface hops out), **Crouch** dives, you move at 0.6 × speed and sink slowly;
   the humanoid does a front crawl (`swim` pose) and the screen gets a blue tint when the camera is under water.
-- **Resolution** (Project Settings > Graphics): Full, Half, Third or Quarter. A lower setting draws the game coarser and
+- **Resolution** (Project Settings > General): Full, Half, Third or Quarter. A lower setting draws the game coarser and
   the browser blows it up with hard pixel edges while you play and in the exported game: the chunky look of an old
   console (and it runs faster on weak machines).
 
@@ -376,10 +376,10 @@ Inter.woff2             the typeface of the on-screen texts (33 KB)
 ```
 
 Upload the zip to itch.io as an HTML game (kind of project: *HTML*, tick *This file will be played in the
-browser*). It also runs by double-clicking `index.html` (no server needed). The exported page shows a
-title, the controls (taken from the project's bindings) and a *Play* button; Esc pauses (and gives the
-mouse back), the *Fullscreen* button fills the screen, **M** mutes. Options: show controls, page background color;
-the title is the project name.
+browser*). It also runs by double-clicking `index.html` (no server needed). The exported page shows the
+menu screen (below), the controls (taken from the project's bindings) and a *Start game* button; Esc pauses (and
+gives the mouse back), the *Fullscreen* button fills the screen, **M** mutes. Options: show controls, page
+background color; the title is the project name.
 
 `player.js` is built by `npm run build:player` (runs automatically before `dev` and `build`).
 
@@ -387,13 +387,25 @@ the title is the project name.
 (Assets > Game objects), models nobody places or wears, textures nothing draws and sounds nothing plays are left
 out (the project in the editor is not touched). The default project goes from about 1.2 MB to 0.5 MB.
 
-**Splash screen.** *Project Settings > Splash screen* takes a picture (PNG, JPEG, GIF or WebP) that the exported
+**Project Settings** has tabs: **General** (title, start fullscreen, resolution), **Menu**, **Splash**, **Controls**
+(mouse, gamepad and the keys) and **Sound** (music and volume). The dialog opens on the tab you left it on.
+
+**Menu screen.** *Project Settings > Menu* is the first screen of the exported game: your **logo** with **Start game**
+and **Settings** under it. Pick a logo picture (PNG, JPEG, GIF or WebP, up to 1024 × 512, bigger ones are made
+smaller; a small pixel logo is made bigger with hard pixels) and how much of the width it takes; without a logo the
+title of the game is written out. Behind it can be the game itself, dimmed (the default), one color or a picture. You
+choose the color of the buttons and what the two buttons say (a paused game says *Continue* on the first). A live
+preview in the dialog shows how it will look, and *Reset the menu* goes back to the plain one. The *Settings* button
+opens the player's own settings (see below), in the colors of your menu. While the game is paused the same
+menu comes back over the dimmed game.
+
+**Splash screen.** *Project Settings > Splash* takes a picture (PNG, JPEG, GIF or WebP) that the exported
 game shows full screen when it starts, before the start screen: it fades in, stays for **Stays** seconds on the
 **Background** color, and a click, a touch or a key skips it. It is kept inside the project (up to 1280 × 720, bigger
 pictures are made smaller). *Preview* shows it. Small pictures are made bigger with hard pixels, so a pixel-art logo
 stays sharp.
 
-**Settings for the player.** *Settings* on the start / pause screen lets whoever plays change: volume, mute,
+**Settings for the player.** *Settings* on the menu / pause screen lets whoever plays change: volume, mute,
 mouse speed (look speed on a phone), invert look up / down, resolution (full, half, third, quarter, for slow
 machines) and every key of the controls (click one, press the new key; a key taken from another action swaps
 over; Esc, M and 1–4 stay reserved). The choices are kept in the browser (`localStorage`, per game name) and win

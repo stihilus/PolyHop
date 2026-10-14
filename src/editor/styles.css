@@ -1968,3 +1968,55 @@ input[type='search']:focus {
   text-align: right;
   color: var(--text);
 }
+
+/* ---------------------------------------------------------------- project settings: tabs and the menu screen */
+.modal-tabs {
+  margin: 0 0 6px;
+}
+.modal-tabs .tab {
+  padding: 8px 4px;
+}
+.settings-panel,
+.menu-settings {
+  min-height: 260px;
+}
+.menu-note {
+  margin: 6px 0 10px;
+}
+.menu-preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: linear-gradient(#78aee6, #5a9a4a);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.menu-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.menu-layer {
+  position: absolute;
+  inset: 0;
+}
+.picture-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+}
+.picture-row-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.picture-row-controls .muted {
+  min-width: 34px;
+}

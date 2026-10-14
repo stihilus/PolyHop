@@ -8,6 +8,7 @@ import { type Rule, type Variable, normalizeRules, normalizeVariables } from './
 import { PRESETS, type PresetKind, missingVariables, presetRules, presetSounds, presetVariables } from './presets';
 import { PRESET_ITEM, PRESET_PROP, builtInPrefabs } from './prefabs';
 import { rawAssetModels } from './assetModels';
+import { type MenuScreen, normalizeMenu } from './menu';
 import { type SplashScreen, normalizeSplash } from './splash';
 import { KIT_KINDS, type KitKind, builtInKitModels, createKitModel, kitModelId } from './kit';
 import { type LevelLook, normalizeLook } from './look';
@@ -133,6 +134,8 @@ export interface ProjectSettings {
   renderScale: number;
   /** A picture shown full screen when the exported game starts. */
   splash?: SplashScreen;
+  /** The menu screen of the exported game (logo, buttons). Left out: the plain one. */
+  menu?: MenuScreen;
 }
 
 export interface TileRef {
@@ -1046,6 +1049,9 @@ export function normalizeProject(raw: unknown): Project {
   const splash = normalizeSplash((r.settings as { splash?: unknown } | undefined)?.splash);
   if (splash) settings.splash = splash;
   else delete settings.splash;
+  const menu = normalizeMenu((r.settings as { menu?: unknown } | undefined)?.menu);
+  if (menu) settings.menu = menu;
+  else delete settings.menu;
   const exported = r.exported === true;
   const prefabs = exported ? [] : normalizePrefabs(r.prefabs);
   if (rawVersion < 7) dropRetiredProps(models, levels, prefabs, player);

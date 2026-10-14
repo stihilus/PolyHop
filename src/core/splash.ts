@@ -19,8 +19,8 @@ export const MAX_SPLASH_CHARS = 4_000_000;
 export const SPLASH_MAX_WIDTH = 1280;
 export const SPLASH_MAX_HEIGHT = 720;
 
-export function isImageDataUrl(value: unknown): value is string {
-  return typeof value === 'string' && value.length <= MAX_SPLASH_CHARS && /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(value);
+export function isImageDataUrl(value: unknown, maxChars = MAX_SPLASH_CHARS): value is string {
+  return typeof value === 'string' && value.length <= maxChars && /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(value);
 }
 
 /** A splash screen of unknown origin made valid, or undefined when there is no usable picture. */
@@ -35,9 +35,14 @@ export function normalizeSplash(raw: unknown): SplashScreen | undefined {
   };
 }
 
-/** The size a picture is shown at when it has to fit inside the limits (never bigger than it is). */
-export function fitSplash(width: number, height: number): { width: number; height: number } {
+/** The size a picture is brought down to when it has to fit inside a box (never made bigger than it is). */
+export function fitWithin(width: number, height: number, maxWidth: number, maxHeight: number): { width: number; height: number } {
   if (width <= 0 || height <= 0) return { width: 1, height: 1 };
-  const k = Math.min(1, SPLASH_MAX_WIDTH / width, SPLASH_MAX_HEIGHT / height);
+  const k = Math.min(1, maxWidth / width, maxHeight / height);
   return { width: Math.max(1, Math.round(width * k)), height: Math.max(1, Math.round(height * k)) };
+}
+
+/** The size a splash picture is shown at when it has to fit inside the limits. */
+export function fitSplash(width: number, height: number): { width: number; height: number } {
+  return fitWithin(width, height, SPLASH_MAX_WIDTH, SPLASH_MAX_HEIGHT);
 }
