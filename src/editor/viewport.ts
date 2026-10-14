@@ -9,6 +9,7 @@ import { Game, type GameStats } from '../runtime/game';
 import { PadReader } from '../runtime/gamepad';
 import { MenuNav } from '../runtime/menuNav';
 import type { TextureLibrary } from '../runtime/textures';
+import { facesInMarquee, marqueeOf, mergeSelection, verticesInMarquee } from './boxSelect';
 import { CameraNav } from './cameraNav';
 import { Gizmo, type TransformDelta, type TransformTarget } from './gizmo';
 import type { LevelObject } from '../core/types';
@@ -966,6 +967,19 @@ export class Viewport {
     this.endMarquee();
     if (this.game.playing || e.button !== 0 || !down) return;
     if (marquee?.active) {
+      // a block is open for editing its points or faces: the rectangle selects those (Shift / Ctrl / Cmd adds),
+      // it does not pick other objects
+      const block = this.selectedBlock();
+      const sub = this.bar.sub;
+      if (block && (sub === 'vertex' || sub === 'face')) {
+        const extend = e.shiftKey || e.ctrlKey || e.metaKey;
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        const box = marqueeOf(down.x, down.y, e.clientX, e.clientY);
+        if (sub === 'vertex') this.edit.vertices = mergeSelection(this.edit.vertices, verticesInMarquee(block, this.editCamera, rect, box), extend);
+        else this.edit.faces = mergeSelection(this.edit.faces, facesInMarquee(block, this.editCamera, rect, box), extend);
+        this.refreshTarget();
+        return;
+      }
       const ids = this.objectsInRect(
         Math.min(down.x, e.clientX),
         Math.min(down.y, e.clientY),

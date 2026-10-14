@@ -489,7 +489,7 @@ numpad. While the right button flies the camera, W A S D Q E drive the camera, n
 | Input | Action |
 | --- | --- |
 | Shift / Ctrl+click an object in the view or in the scene list | add it to the selection, or take it out |
-| Drag a rectangle over the view | select everything whose center is inside (Shift / Ctrl adds to the selection) |
+| Drag a rectangle over the view | select everything whose center is inside (Shift / Ctrl adds to the selection). With a block selected in **Vertex** or **Face** mode (keys 3 / 2) the rectangle picks that block's points or faces instead (Shift / Ctrl adds); press 1 for Object mode to pick objects again |
 | Ctrl/Cmd+A | select all objects of the level |
 | Ctrl/Cmd+D, Duplicate, Delete | copy or delete all selected (rules of the copies point at the copies) |
 
