@@ -2028,3 +2028,34 @@ input[type='search']:focus {
   color: var(--muted);
   text-align: right;
 }
+
+/* the style check of a model (Hytale guide) */
+.style-details {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 8px 8px;
+  background: var(--panel-2);
+}
+.style-details summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+.style-ok {
+  color: #8fd9a0;
+}
+.style-bad {
+  color: #ffb08a;
+}
+.style-line {
+  margin: 4px 0;
+  font-size: 11px;
+}
+.style-problem {
+  margin: 3px 0;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: #ffb08a;
+  background: rgb(255 120 60 / 0.08);
+  border-radius: 3px;
+}

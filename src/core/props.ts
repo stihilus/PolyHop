@@ -1,9 +1,9 @@
-// Built-in prop models (trees, ores, furniture, gems, ...) drawn with the tiles of assets/textures/Props-16.png
+// Built-in prop models (furniture, plants, gems, characters ...) drawn with the tiles of assets/textures/Props-16.png
 // (made by tools/make-props.py). They are in every project's Models list and are ordinary models after
-// that: re-texture them, change their cubes, animate them.
+// that: re-texture them, change their cubes, animate them. Like all built-in models they are made of cubes
+// and quads only, as the Hytale modeling guide asks (see hytaleStyle.ts).
 
-import { meshBounds, rockMesh, tuftMesh } from './mesh';
-import { cylinderMesh, domeMesh, sphereMesh } from './meshGen';
+import { tuftMesh } from './mesh';
 import { type Look as LookOf, ModelBuilder } from './modelBuilder';
 import type { Model, Vec3 } from './types';
 
@@ -94,13 +94,14 @@ const RECIPES: Record<string, { name: string; build: (b: Builder) => void }> = {
   slime: {
     name: 'Slime',
     build: (b) => {
-      // a wobbling blob with eyes: the body squashes and stretches (position bob) in a loop
+      // a wobbling jelly with eyes: the body squashes and stretches (position bob) in a loop
       const body = b.bone('Body', [0, 0, 0]);
-      b.mesh('Body', [0, 0.1, 0], domeMesh(0.5, 10, 4, rectOf('slime')), [0, 0, 0], body, true);
-      b.box('Eye', [-0.17, 0.32, 0.4], [0.12, 0.14, 0.06], 'snow', [0, 0, 0], body);
-      b.box('Eye 2', [0.17, 0.32, 0.4], [0.12, 0.14, 0.06], 'snow', [0, 0, 0], body);
-      b.box('Pupil', [-0.17, 0.3, 0.44], [0.06, 0.08, 0.03], 'dark_metal', [0, 0, 0], body);
-      b.box('Pupil 2', [0.17, 0.3, 0.44], [0.06, 0.08, 0.03], 'dark_metal', [0, 0, 0], body);
+      b.box('Body', [0, 0.1, 0], [1.0, 0.5, 0.95], 'slime', [0, 0, 0], body);
+      b.box('Top', [0, 0.36, -0.02], [0.64, 0.22, 0.6], 'slime', [0, 12, 0], body);
+      b.box('Eye', [-0.17, 0.2, 0.48], [0.14, 0.16, 0.06], 'snow', [0, 0, 0], body);
+      b.box('Eye 2', [0.17, 0.2, 0.48], [0.14, 0.16, 0.06], 'snow', [0, 0, 0], body);
+      b.box('Pupil', [-0.17, 0.18, 0.51], [0.07, 0.09, 0.04], 'dark_metal', [0, 0, 0], body);
+      b.box('Pupil 2', [0.17, 0.18, 0.51], [0.07, 0.09, 0.04], 'dark_metal', [0, 0, 0], body);
       b.clip('hop', 0.9, true, {
         Body: {
           pos: [
@@ -123,15 +124,17 @@ const RECIPES: Record<string, { name: string; build: (b: Builder) => void }> = {
     name: 'Villager',
     build: (b) => {
       const sway = b.bone('Body', [0, 0, 0]);
-      b.mesh('Robe', [0, 0.55, 0], cylinderMesh(10, 0.42, 0.27, 1.1, rectOf('cloth_blue')), [0, 0, 0], sway);
-      b.mesh('Head', [0, 1.38, 0], sphereMesh(0.24, 8, 5, rectOf('wool_white')), [0, 0, 0], sway, true);
-      b.box('Nose', [0, 1.35, 0.25], [0.07, 0.1, 0.1], 'sand', [0, 0, 0], sway);
-      b.box('Eye', [-0.09, 1.42, 0.21], [0.05, 0.05, 0.03], 'dark_metal', [0, 0, 0], sway);
-      b.box('Eye 2', [0.09, 1.42, 0.21], [0.05, 0.05, 0.03], 'dark_metal', [0, 0, 0], sway);
-      b.mesh('Hat', [0, 1.68, 0], cylinderMesh(8, 0.26, 0, 0.5, rectOf('cloth_red')), [0, 0, 0], sway);
-      b.box('Brim', [0, 1.45, 0], [0.62, 0.05, 0.62], 'cloth_red', [0, 0, 0], sway);
-      b.box('Arm', [-0.4, 0.95, 0.05], [0.14, 0.5, 0.14], 'cloth_blue', [0, 0, 15], sway);
-      b.box('Arm 2', [0.4, 0.95, 0.05], [0.14, 0.5, 0.14], 'cloth_blue', [0, 0, -15], sway);
+      b.box('Robe', [0, 0.3, 0], [0.72, 0.6, 0.56], 'cloth_blue', [0, 0, 0], sway);
+      b.box('Robe 2', [0, 0.82, 0], [0.58, 0.5, 0.46], 'cloth_blue', [0, 0, 0], sway);
+      b.box('Head', [0, 1.3, 0], [0.5, 0.5, 0.5], 'wool_white', [0, 0, 0], sway);
+      b.box('Nose', [0, 1.26, 0.28], [0.09, 0.12, 0.1], 'sand', [0, 0, 0], sway);
+      b.box('Eye', [-0.11, 1.35, 0.26], [0.07, 0.07, 0.04], 'dark_metal', [0, 0, 0], sway);
+      b.box('Eye 2', [0.11, 1.35, 0.26], [0.07, 0.07, 0.04], 'dark_metal', [0, 0, 0], sway);
+      b.box('Brim', [0, 1.57, 0], [0.7, 0.07, 0.7], 'cloth_red', [0, 0, 0], sway);
+      b.box('Hat', [0, 1.74, 0], [0.46, 0.28, 0.46], 'cloth_red', [0, 0, 0], sway);
+      b.box('Hat top', [0, 1.98, 0], [0.26, 0.22, 0.26], 'cloth_red', [0, 12, 0], sway);
+      b.box('Arm', [-0.44, 0.85, 0.05], [0.16, 0.55, 0.16], 'cloth_blue', [0, 0, 15], sway);
+      b.box('Arm 2', [0.44, 0.85, 0.05], [0.16, 0.55, 0.16], 'cloth_blue', [0, 0, -15], sway);
       b.clip('idle', 2.4, true, {
         Body: {
           rot: [
@@ -190,15 +193,18 @@ const RECIPES: Record<string, { name: string; build: (b: Builder) => void }> = {
   boulder: {
     name: 'Boulder',
     build: (b) => {
-      const mesh = rockMesh(7, 1.3, rectOf('stone'));
-      b.mesh('Rock', [0, -meshBounds(mesh).min[1], 0], mesh);
+      b.box('Rock', [0.05, 0.4, 0], [1.3, 0.8, 1.2], 'stone', [0, 15, 0]);
+      b.box('Rock 2', [0.5, 0.35, 0.3], [0.8, 0.7, 0.7], 'stone', [6, 40, -8]);
+      b.box('Rock 3', [-0.4, 0.3, -0.3], [0.7, 0.6, 0.7], 'stone', [-5, 60, 8]);
+      b.box('Rock 4', [0.0, 0.85, 0.0], [0.6, 0.35, 0.55], 'stone', [4, 25, 6]);
     },
   },
   'mossy-boulder': {
     name: 'Mossy boulder',
     build: (b) => {
-      const mesh = rockMesh(3, 1.1, rectOf('cobble_mossy'));
-      b.mesh('Rock', [0, -meshBounds(mesh).min[1], 0], mesh);
+      b.box('Rock', [0, 0.32, 0], [1.1, 0.64, 1.0], 'cobble_mossy', [0, -20, 0]);
+      b.box('Rock 2', [-0.35, 0.28, 0.25], [0.6, 0.55, 0.6], 'cobble_mossy', [5, 35, 6]);
+      b.box('Moss', [0.1, 0.68, -0.05], [0.7, 0.14, 0.6], 'moss', [0, 10, 0]);
     },
   },
   poppy: { name: 'Poppy', build: (b) => sprite(b, 'Flower', 'poppy', 0.8) },
@@ -224,7 +230,7 @@ const RECIPES: Record<string, { name: string; build: (b: Builder) => void }> = {
   barrel: {
     name: 'Barrel',
     build: (b) => {
-      b.prism('Barrel', [0, 0.45, 0], 8, 0.42, 0.9, 'barrel_side', 'barrel_top');
+      b.round('Barrel', [0, 0.45, 0], [0.76, 0.9, 0.76], { side: 'barrel_side', top: 'barrel_top', bottom: 'barrel_top' });
     },
   },
   chest: {
@@ -350,7 +356,7 @@ const RECIPES: Record<string, { name: string; build: (b: Builder) => void }> = {
     build: (b) => {
       b.box('Base', [0, 0.1, 0.05], [0.9, 0.2, 0.5], 'stone');
       b.box('Slab', [0, 0.65, 0], [0.7, 1.1, 0.2], 'gravestone');
-      b.box('Moss', [0.2, 1.0, 0.11], [0.25, 0.2, 0.02], 'moss');
+      b.box('Moss', [0.2, 1.0, 0.12], [0.26, 0.2, 0.05], 'moss');
     },
   },
   banner: {
@@ -449,14 +455,15 @@ function potion(b: Builder, tile: PropTile): void {
   b.box('Cork', [0, 0.43, 0], [0.12, 0.07, 0.12], 'cork');
 }
 
-/** A cluster of three crystals on a bit of rock, turning slowly. */
+/** A cluster of three crystals on a bit of rock, turning slowly: tall cubes, each with a smaller one turned on top. */
 function crystals(b: Builder, tile: PropTile): void {
   b.box('Rock', [0, 0.05, 0], [0.7, 0.1, 0.7], 'stone');
-  b.prism('Crystal', [0, 0.5, 0], 6, 0.16, 0.8, tile, tile);
-  b.prism('Crystal 2', [0.24, 0.32, 0.1], 6, 0.11, 0.5, tile, tile);
-  b.cubes[b.cubes.length - 1]!.rotation = [0, 0, -18];
-  b.prism('Crystal 3', [-0.22, 0.26, -0.12], 6, 0.09, 0.4, tile, tile);
-  b.cubes[b.cubes.length - 1]!.rotation = [0, 0, 16];
+  b.box('Crystal', [0, 0.45, 0], [0.28, 0.7, 0.28], tile, [0, 30, 0]);
+  b.box('Crystal tip', [0, 0.88, 0], [0.18, 0.18, 0.18], tile, [0, 75, 0]);
+  b.box('Crystal 2', [0.24, 0.3, 0.1], [0.2, 0.46, 0.2], tile, [0, 20, -18]);
+  b.box('Crystal 2 tip', [0.3, 0.58, 0.1], [0.13, 0.14, 0.13], tile, [0, 65, -18]);
+  b.box('Crystal 3', [-0.22, 0.24, -0.12], [0.17, 0.36, 0.17], tile, [0, 10, 16]);
+  b.box('Crystal 3 tip', [-0.27, 0.46, -0.12], [0.11, 0.12, 0.11], tile, [0, 55, 16]);
   spinAll(b, 8);
 }
 

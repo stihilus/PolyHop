@@ -44,13 +44,16 @@ import { propModelId } from './props';
 
 /**
  * An empty project: one flat ground and the player on it. The game objects (coin, door, slime ...) and the
- * variables they use are there; of the models only the two characters are, the rest (props, building kit ...)
- * is added when a game object that needs one is placed, so the Models list starts out as your own.
+ * variables they use are there, and so are their models (to edit them) and the two characters; the rest of the
+ * props and the building kit is added when something that needs one is placed, so the Models list stays short.
  */
 export function createBlankProject(): Project {
   const p = createDefaultProject();
   p.settings.name = 'My Game';
-  p.models = p.models.filter((m) => HUMANOID_IDS.includes(m.id));
+  // the two characters, and the models the game objects are made of: a game object's model has to be there to be edited
+  const needed = new Set<string>(HUMANOID_IDS);
+  for (const prefab of p.prefabs) if (prefab.object.kind === 'model') needed.add(prefab.object.modelId);
+  p.models = p.models.filter((m) => needed.has(m.id));
   p.levels = [createLevelData('Level 1', emptyLevelObjects(), [0, 0.05, 0], 180)];
   return p;
 }

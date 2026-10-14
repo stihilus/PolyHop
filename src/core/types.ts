@@ -3,6 +3,8 @@
 
 import { packRects } from './atlasPack';
 import { HUMANOID_FEMALE_ID, HUMANOID_ID, HUMANOID_IDS, OLD_HUMANOID_SKINS, createHumanoidModel, refreshHumanoidLayout } from './humanoid';
+import { LEGACY_MODEL_HASHES } from './legacyModels';
+import { geometryHash } from './modelHash';
 import { ITEMS_ATLAS, ITEM_MODEL_IDS, type ItemKind, TILE, createItemModel } from './items';
 import { type Rule, type Variable, normalizeRules, normalizeVariables } from './logic';
 import { PRESETS, type PresetKind, missingVariables, presetRules, presetSounds, presetVariables } from './presets';
@@ -754,8 +756,9 @@ export function defaultLevel(): LevelObject[] {
  * come as files (assets/models) are in every project. 11: the humanoid was rebuilt (new parts, bone names and skins).
  * 12: the humanoid has no nose and its hair is a part of its own; there is a female build as well.
  * 13: the characters got a smaller, squarer head (a new layout, so the skins changed too).
+ * 14: the built-in models were redrawn as cubes and quads only (the Hytale modeling guide); the characters too.
  */
-export const PROJECT_VERSION = 13;
+export const PROJECT_VERSION = 14;
 
 export function createDefaultProject(): Project {
   return {
@@ -966,9 +969,10 @@ export function normalizeProject(raw: unknown): Project {
     const saved = models.find((m) => m.id === HUMANOID_ID);
     if (saved) refreshHumanoidLayout(saved, createHumanoidModel(newId));
   }
-  // versions 11 to 13: the humanoid was rebuilt from scratch (other parts, bone names, skins; then no nose and the hair as
-  // parts of its own; then a smaller head): a saved one is replaced by the current one, and the female build is added
-  if (rawVersion < 13) {
+  // versions 11 to 14: the humanoid was rebuilt from scratch (other parts, bone names, skins; then no nose and the hair as
+  // parts of its own; then a smaller head; then plain cubes): a saved one is replaced by the current one, and the
+  // female build is added
+  if (rawVersion < 14) {
     const at = models.findIndex((m) => m.id === HUMANOID_ID);
     if (at >= 0) models[at] = createHumanoidModel(newId);
     const femaleAt = models.findIndex((m) => m.id === HUMANOID_FEMALE_ID);
@@ -991,6 +995,20 @@ export function normalizeProject(raw: unknown): Project {
       HyRoot: 'Root',
     };
     for (const a of player.attachments) a.bone = renamed[a.bone] ?? a.bone;
+  }
+  // version 14: the built-in props, kit, pickups and demo models were redrawn as cubes and quads only. A saved copy
+  // that is still exactly the old built-in one (same shapes, same texture) is replaced; one the user changed stays.
+  if (rawVersion < 14) {
+    for (let i = 0; i < models.length; i++) {
+      const saved = models[i]!;
+      const was = LEGACY_MODEL_HASHES[saved.id];
+      if (!was || geometryHash(saved) !== was) continue;
+      const fresh = builtInModelById(saved.id);
+      // only a model that was really redrawn is swapped (a built-in one that did not change is left as it is)
+      if (!fresh || fresh.texture !== saved.texture || geometryHash(fresh) === was) continue;
+      fresh.name = saved.name;
+      models[i] = fresh;
+    }
   }
   // the player grew to 1.8 m: take over the new body size where the old default was never changed
   if (rawVersion < 4) {

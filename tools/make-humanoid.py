@@ -10,7 +10,7 @@
   assets/textures/Character-Female-Explorer.png an adventurer: a headband, a green vest, boots
   assets/textures/Character-Female-Template.png the template of the female character
 
-The build follows a stylized game character: a head that is nearly a cube (a fifth of the body), a short neck, a broad chest,
+The build follows a stylized game character: a head that is nearly a cube (a fifth of the body), a short neck, a broad chest, every part a plain cube,
 arms with separate hands, legs with long flat feet, and the hair as parts of its own. There is no nose in the
 geometry (the face is painted). Everything is made from the numbers below (sizes in pixels, the whole body is
 scaled to be 1 m tall before the game scales it to the player's height), so the models and the skins are always
@@ -36,10 +36,16 @@ TEX = 128
 
 
 def part(y, h, bw, bd, tw=None, td=None, cx=0.0, bcz=0.0, tcz=None):
+    """A cube. The Hytale modeling guide allows cubes and quads only (no tapered, skewed or beveled boxes), so when a
+    top size is given too the cube takes the average of the two; the figures below are those of a slightly tapered
+    first draft."""
     tw = bw if tw is None else tw
     td = bd if td is None else td
     tcz = bcz if tcz is None else tcz
-    return {"y": y, "h": h, "b": (cx, bcz, bw, bd), "t": (cx, tcz, tw, td)}
+    w = (bw + tw) / 2
+    d = (bd + td) / 2
+    z = (bcz + tcz) / 2
+    return {"y": y, "h": h, "b": (cx, z, w, d), "t": (cx, z, w, d)}
 
 
 def head_dims(p, y):
@@ -102,7 +108,7 @@ def male_parts():
     p["Waist"] = part(30.4, 5.0, 12.2, 7.0, 12.6, 7.4)
     p["Chest"] = part(35.4, 11.4, 12.6, 7.4, 15.2, 8.6)
     p["Neck"] = part(46.4, 1.8, 4.2, 4.2, 4.0, 4.0)
-    p["Head"] = part(48.0, 13.4, 12.4, 11.8, 14.0, 13.0)
+    p["Head"] = part(48.0, 13.0, 13.6, 12.8)
     p.update(hair(p["Head"], long_hair=False))
     p["RightEar"] = part(52.4, 3.4, 1.2, 3.0, cx=-7.1)
     p["LeftEar"] = part(52.4, 3.4, 1.2, 3.0, cx=7.1)
@@ -112,7 +118,7 @@ def male_parts():
     p.update(both("Thigh", 14.8, 10.6, 4.8, 5.3, 5.7, 6.1, 3.2))
     p.update(both("Shin", 3.8, 11.0, 4.0, 4.3, 4.7, 4.9, 3.2))
     for sign, side in ((-1, "Right"), (1, "Left")):
-        p[f"{side}Foot"] = part(0.0, 3.8, 4.7, 10.0, 4.4, 6.8, cx=sign * 3.2, bcz=2.5, tcz=1.0)
+        p[f"{side}Foot"] = part(0.0, 3.8, 4.6, 9.6, cx=sign * 3.2, bcz=2.3)
     return p
 
 
@@ -122,7 +128,7 @@ def female_parts():
     p["Waist"] = part(30.4, 4.8, 11.0, 6.8, 10.4, 6.6)
     p["Chest"] = part(35.2, 11.2, 10.6, 6.8, 13.2, 7.8)
     p["Neck"] = part(46.0, 1.8, 3.6, 3.6, 3.4, 3.4)
-    p["Head"] = part(47.6, 12.4, 11.4, 10.8, 12.8, 12.0)
+    p["Head"] = part(47.6, 12.0, 12.4, 11.8)
     p.update(hair(p["Head"], long_hair=True))
     p["RightEar"] = part(51.6, 3.2, 1.2, 2.8, cx=-6.5)
     p["LeftEar"] = part(51.6, 3.2, 1.2, 2.8, cx=6.5)
@@ -132,7 +138,7 @@ def female_parts():
     p.update(both("Thigh", 14.6, 10.6, 4.7, 5.1, 5.8, 5.9, 3.2))
     p.update(both("Shin", 3.6, 11.0, 3.6, 4.0, 4.5, 4.7, 3.2))
     for sign, side in ((-1, "Right"), (1, "Left")):
-        p[f"{side}Foot"] = part(0.0, 3.6, 4.3, 9.4, 4.0, 6.4, cx=sign * 3.2, bcz=2.3, tcz=0.9)
+        p[f"{side}Foot"] = part(0.0, 3.6, 4.2, 9.0, cx=sign * 3.2, bcz=2.1)
     return p
 
 
@@ -388,6 +394,15 @@ class Skin:
         return r[2], r[3]
 
     def save(self, path):
+        # no pure white (the highlight of an eye) and no pure black, as the Hytale texturing advice says
+        px = self.im.load()
+        for y in range(TEX):
+            for x in range(TEX):
+                r, g, b, a = px[x, y]
+                if a and r >= 252 and g >= 252 and b >= 252:
+                    px[x, y] = (252, 249, 238, a)
+                elif a and r <= 3 and g <= 3 and b <= 3:
+                    px[x, y] = (22, 18, 32, a)
         self.im.save(path)
 
 

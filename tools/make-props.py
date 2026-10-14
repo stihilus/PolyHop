@@ -10,6 +10,9 @@ import random
 from pathlib import Path
 
 from PIL import Image
+import sys
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
+from pixel_helpers import soften_extremes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 T = 16
@@ -700,5 +703,5 @@ for bx, top in [(4, 2), (7, 0), (10, 3), (12, 1)]:
     t.rect(bx - 1, top, bx, top + 3, (120, 84, 48))
 
 out = ROOT / "assets/textures/Props-16.png"
-im.save(out)
+soften_extremes(im).save(out)
 print("wrote", out, im.size)

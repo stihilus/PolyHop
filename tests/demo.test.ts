@@ -5,6 +5,8 @@ import { type Action, type Rule, normalizeRules, variablesUsed } from '../src/co
 import { SOUND_IDS } from '../src/core/sounds';
 import { HUMANOID_FEMALE_ID, HUMANOID_ID } from '../src/core/humanoid';
 import { ITEM_MODEL_IDS } from '../src/core/items';
+import { kitModelId } from '../src/core/kit';
+import { propModelId } from '../src/core/props';
 import { builtInModelById, createLevelData, defaultPlayer, ensurePresetAssets, normalizeProject } from '../src/core/types';
 import { Game, levelFloor } from '../src/runtime/game';
 import { boxFromCenterSize } from '../src/runtime/physics';
@@ -27,7 +29,7 @@ function allActions(rules: Rule[]): Action[] {
 }
 
 describe('the blank project', () => {
-  it('is one empty level with a floor, the game objects and their variables, and no models but the two characters', () => {
+  it('is one empty level with a floor, the game objects with their models and variables, and the two characters', () => {
     const p = createBlankProject();
     expect(p.levels).toHaveLength(1);
     expect(p.levels[0]!.objects.map((o) => o.name)).toEqual(['Ground']);
@@ -35,14 +37,22 @@ describe('the blank project', () => {
     // the game objects are all there, with the variables they count in
     expect(p.prefabs).toHaveLength(13);
     expect(p.variables.map((v) => v.name).sort()).toEqual(['coins', 'health', 'keys']);
-    // the Models list is the two characters only
-    expect(p.models.map((m) => m.id)).toEqual([HUMANOID_ID, HUMANOID_FEMALE_ID]);
+    // the Models list is the two characters and the models the game objects are made of (to edit them), nothing else
+    const used = new Set(p.prefabs.flatMap((x) => (x.object.kind === 'model' ? [x.object.modelId] : [])));
+    expect(used.size).toBeGreaterThanOrEqual(7);
+    expect(new Set(p.models.map((m) => m.id))).toEqual(new Set([HUMANOID_ID, HUMANOID_FEMALE_ID, ...used]));
+    for (const id of [ITEM_MODEL_IDS.coin, ITEM_MODEL_IDS.key, ITEM_MODEL_IDS.trophy, propModelId('slime'), propModelId('villager')]) {
+      expect(p.models.some((m) => m.id === id), id).toBe(true);
+    }
+    expect(p.models.some((m) => m.id === propModelId('bench'))).toBe(false);
+    expect(p.models.some((m) => m.id === kitModelId('house'))).toBe(false);
     expect(p.player.modelId).toBe(HUMANOID_ID);
   });
 
-  it('a game object brings its model when it is placed, and has a picture to show before that', () => {
+  it('a game object brings its model when it is placed (when the model was deleted), and can be pictured from its id', () => {
     const p = createBlankProject();
-    expect(p.models.some((m) => m.id === ITEM_MODEL_IDS.coin)).toBe(false);
+    expect(p.models.some((m) => m.id === ITEM_MODEL_IDS.coin)).toBe(true);
+    p.models = p.models.filter((m) => m.id !== ITEM_MODEL_IDS.coin);
     expect(ensurePresetAssets(p, 'coin')).toBe(ITEM_MODEL_IDS.coin);
     expect(p.models.some((m) => m.id === ITEM_MODEL_IDS.coin)).toBe(true);
     // every model a game object uses can be made again from its id (for the picture in the Assets list)
@@ -59,7 +69,7 @@ describe('the blank project', () => {
   it('survives saving and loading as it is', () => {
     const p = createBlankProject();
     const back = normalizeProject(JSON.parse(JSON.stringify(p)));
-    expect(back.models.map((m) => m.id)).toEqual([HUMANOID_ID, HUMANOID_FEMALE_ID]);
+    expect(back.models.map((m) => m.id)).toEqual(p.models.map((m) => m.id));
     expect(back.prefabs).toHaveLength(13);
   });
 });

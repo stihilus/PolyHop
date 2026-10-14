@@ -7,6 +7,9 @@ import random
 from pathlib import Path
 
 from PIL import Image
+import sys
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
+from pixel_helpers import soften_extremes  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 T = 16
@@ -87,5 +90,5 @@ for x in range(T):
     put(7, x, T - 3, (150, 20, 40, 255))
 
 out = ROOT / "assets/textures/Items-16.png"
-im.save(out)
+soften_extremes(im).save(out)
 print("wrote", out)

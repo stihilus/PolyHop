@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KIT_ATLAS, KIT_KINDS, KIT_TILE_NAMES, builtInKitModels, createKitModel, kitModelId, kitTilePos } from '../src/core/kit';
+import { checkModel } from '../src/core/hytaleStyle';
 import { isValidMesh } from '../src/core/mesh';
 import { createDefaultProject, normalizeModel, normalizeProject } from '../src/core/types';
 import { modelBounds } from '../src/runtime/modelRender';
@@ -52,21 +53,26 @@ describe('building kit and modeled trees', () => {
     expect(createKitModel('windmill', ids).clips.map((c) => c.name)).toEqual(['turn']);
   });
 
-  it('round things are shaded smooth and survive saving', () => {
-    const oak = createKitModel('oak-tree', ids);
-    expect(oak.cubes.filter((c) => c.smooth).length).toBeGreaterThanOrEqual(5);
-    const back = normalizeModel(JSON.parse(JSON.stringify(oak)));
-    expect(back.cubes.filter((c) => c.smooth).length).toBe(oak.cubes.filter((c) => c.smooth).length);
-    // a wall is hewn (bevelled): more faces than a plain box
+  it('everything is a cube or a quad, and round things are turned cubes (the Hytale guide)', () => {
+    for (const kind of KIT_KINDS) {
+      const r = checkModel(createKitModel(kind, ids));
+      expect(r.problems, kind).toEqual([]);
+      expect(r.boxes + r.quads, kind).toBeGreaterThan(0);
+    }
+    // a wall is plain cubes now, not a bevelled shape; it survives saving as it is
     const wall = createKitModel('stone-wall', ids);
-    expect(wall.cubes[0]!.mesh.faces.length).toBeGreaterThan(6);
+    expect(wall.cubes.every((c) => c.mesh.faces.length === 6)).toBe(true);
+    const back = normalizeModel(JSON.parse(JSON.stringify(wall)));
+    expect(checkModel(back).problems).toEqual([]);
   });
 
-  it('the trees are not made of boxes', () => {
+  it('a tree is a trunk of cubes and clumps of turned cubes', () => {
     for (const kind of ['oak-tree', 'pine-tree', 'birch-tree', 'palm-tree', 'cherry-tree', 'autumn-tree', 'dead-tree']) {
       const m = createKitModel(kind, ids);
-      // a box has 8 vertices and 6 faces; every part of a tree is rounder than that
-      expect(m.cubes.every((c) => c.mesh.faces.length > 6 || c.mesh.verts.length !== 8), kind).toBe(true);
+      expect(m.cubes.length, kind).toBeGreaterThanOrEqual(6);
+      // some part is turned about the vertical axis: a clump is not a stack of aligned blocks
+      expect(m.cubes.some((c) => c.rotation.some((r) => r !== 0)), kind).toBe(true);
+      expect(checkModel(m).tier, kind).toBeLessThanOrEqual(3);
     }
   });
 

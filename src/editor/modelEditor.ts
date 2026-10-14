@@ -16,6 +16,7 @@ import {
   normalizeModel,
 } from '../core/types';
 import { type UVPoly, clampUv, cloneUv, flipUvH, flipUvV, rotateUvCW, uvBounds } from '../core/uv';
+import { checkModel, tierLabel } from '../core/hytaleStyle';
 import type { ModelLibrary, ModelRender } from '../runtime/modelRender';
 import { RigRender } from '../runtime/rigRender';
 import type { TextureInfo, TextureLibrary } from '../runtime/textures';
@@ -1067,7 +1068,7 @@ export class ModelEditor {
       ),
     );
 
-    this.inspectorEl.append(this.buildRigSection(model));
+    this.inspectorEl.append(this.buildRigSection(model), this.buildStyleSection(model));
 
     // ---- selected shape
     const cube = this.cube;
@@ -1205,6 +1206,36 @@ export class ModelEditor {
     );
     this.uvView.redraw();
     this.focusUv();
+  }
+
+  /**
+   * The guide of the Hytale art team (see core/hytaleStyle.ts) as a check: is the model made of cubes and quads,
+   * how many triangles does it have, and what in it is against the rules.
+   */
+  private buildStyleSection(model: Model): HTMLElement {
+    const report = checkModel(model);
+    const ok = report.problems.length === 0;
+    const details = el('details', { class: 'style-details' });
+    details.open = !ok;
+    details.append(
+      el('summary', {
+        class: ok ? 'style-ok' : 'style-bad',
+        text: `Style · ${ok ? 'cubes and quads only ✓' : `${report.problems.length} thing${report.problems.length === 1 ? '' : 's'} against the guide`} · ${report.triangles} triangles`,
+      }),
+    );
+    details.append(
+      el('div', { class: 'muted style-line', text: `${report.boxes} cube${report.boxes === 1 ? '' : 's'}, ${report.quads} quad${report.quads === 1 ? '' : 's'} · ${tierLabel(report.tier)}` }),
+    );
+    for (const p of [...report.problems, ...report.warnings]) {
+      details.append(el('div', { class: 'style-problem', text: `${p.cube}: ${p.message}` }));
+    }
+    details.append(
+      el('div', {
+        class: 'muted style-line',
+        text: 'The guide of the Hytale art team: only cubes (6 sides) and quads (2 sides), angles made by turning them, no spheres, cones, wedges or bevels; chunky, toylike shapes; a prop under 400 triangles. It is a best practice, not a law: a model that breaks it still works.',
+      }),
+    );
+    return details;
   }
 
   /** Skeleton and animation preview of the open model. */

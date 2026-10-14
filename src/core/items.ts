@@ -1,7 +1,8 @@
 // Models of the built-in pickups, drawn with the tiles of assets/textures/Items-16.png. They are made
-// the first time a Coin, Key, Apple, Checkpoint or Goal is added, and are ordinary models after that.
+// the first time a Coin, Key, Apple, Checkpoint or Goal is added, and are ordinary models after that. Cubes only
+// (a coin is two thin cubes, one turned 45 degrees), as the Hytale modeling guide asks (see hytaleStyle.ts).
 
-import { type MeshData, boxMesh, prismMesh, rockMesh } from './mesh';
+import { type MeshData, boxMesh } from './mesh';
 import type { Model, ModelCube, Vec3 } from './types';
 
 export const ITEMS_ATLAS = 'Items-16.png';
@@ -65,9 +66,12 @@ export function createItemModel(kind: ItemKind, idGen: Idgen): Model {
   const base = { id: ITEM_MODEL_IDS[kind], texture: ITEMS_ATLAS };
   switch (kind) {
     case 'coin': {
-      // a disc standing on its edge; the prism's axis is vertical, so lay it down by 90 degrees about X
-      const disc = cube(idGen, 'Coin', [0, 0.5, 0], prismMesh(10, 0.27, 0.07, rect(TILE.coin)), [90, 0, 0]);
-      return { ...base, name: 'Coin', cubes: [disc], ...spinning(idGen, [disc], [0, 0.5, 0], 1.4) };
+      // a disc: a thin cube and a second one turned 45 degrees (an eight-sided coin), standing on its edge
+      const parts = [
+        cube(idGen, 'Coin', [0, 0.5, 0], boxMesh([0.46, 0.46, 0.07], null, null, rect(TILE.coin))),
+        cube(idGen, 'Coin turned', [0, 0.5, 0], boxMesh([0.46, 0.46, 0.06], null, null, rect(TILE.coin)), [0, 0, 45]),
+      ];
+      return { ...base, name: 'Coin', cubes: parts, ...spinning(idGen, parts, [0, 0.5, 0], 1.4) };
     }
     case 'key': {
       const parts = [
@@ -80,9 +84,11 @@ export function createItemModel(kind: ItemKind, idGen: Idgen): Model {
     }
     case 'apple': {
       const parts = [
-        cube(idGen, 'Apple', [0, 0.36, 0], rockMesh(11, 0.5, rect(TILE.apple))),
-        cube(idGen, 'Stem', [0, 0.68, 0], boxMesh([0.05, 0.12, 0.05], null, null, rect(TILE.stem))),
-        cube(idGen, 'Leaf', [0.08, 0.72, 0], boxMesh([0.16, 0.03, 0.09], null, null, rect(TILE.leaf))),
+        cube(idGen, 'Apple', [0, 0.34, 0], boxMesh([0.46, 0.4, 0.46], null, null, rect(TILE.apple)), [0, 20, 0]),
+        cube(idGen, 'Apple top', [0, 0.58, 0], boxMesh([0.4, 0.16, 0.4], null, null, rect(TILE.apple)), [0, 50, 0]),
+        cube(idGen, 'Apple bottom', [0, 0.17, 0], boxMesh([0.34, 0.14, 0.34], null, null, rect(TILE.apple)), [0, 35, 0]),
+        cube(idGen, 'Stem', [0, 0.72, 0], boxMesh([0.06, 0.14, 0.06], null, null, rect(TILE.stem))),
+        cube(idGen, 'Leaf', [0.1, 0.74, 0], boxMesh([0.16, 0.04, 0.09], null, null, rect(TILE.leaf)), [0, 0, 18]),
       ];
       return { ...base, name: 'Apple', cubes: parts, ...spinning(idGen, parts, [0, 0.4, 0], 3) };
     }
@@ -91,7 +97,8 @@ export function createItemModel(kind: ItemKind, idGen: Idgen): Model {
       const parts = [
         cube(idGen, 'Base', [0, 0.06, 0], boxMesh([0.5, 0.12, 0.5], null, null, rect(TILE.coinEdge))),
         cube(idGen, 'Stem', [0, 0.28, 0], boxMesh([0.12, 0.32, 0.12], null, null, rect(TILE.coin))),
-        cube(idGen, 'Cup', [0, 0.62, 0], prismMesh(8, 0.26, 0.36, rect(TILE.coin))),
+        cube(idGen, 'Cup foot', [0, 0.5, 0], boxMesh([0.3, 0.14, 0.3], null, null, rect(TILE.coin))),
+        cube(idGen, 'Cup', [0, 0.69, 0], boxMesh([0.5, 0.26, 0.5], null, null, rect(TILE.coin))),
         cube(idGen, 'Handle', [0.33, 0.64, 0], boxMesh([0.1, 0.22, 0.06], null, null, rect(TILE.coinEdge))),
         cube(idGen, 'Handle 2', [-0.33, 0.64, 0], boxMesh([0.1, 0.22, 0.06], null, null, rect(TILE.coinEdge))),
       ];

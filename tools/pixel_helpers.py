@@ -1,9 +1,29 @@
-"""Small helpers for drawing 16 x 16 tile atlases with PIL (used by make-kit.py)."""
+"""Small helpers for drawing 16 x 16 tile atlases with PIL (used by make-kit.py, make-demo.py)."""
 import random
 
 from PIL import Image
 
 T = 16
+
+# The Hytale texturing advice: no pure white and no pure black (they break the lighting and ruin the values).
+OFF_WHITE = (252, 249, 238)
+OFF_BLACK = (22, 18, 32)
+
+
+def soften_extremes(im):
+    """Take pure white and pure black out of an image: sparkles become warm white, black becomes a dark violet."""
+    px = im.load()
+    w, h = im.size
+    for y in range(h):
+        for x in range(w):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            if r >= 252 and g >= 252 and b >= 252:
+                px[x, y] = (*OFF_WHITE, a)
+            elif r <= 3 and g <= 3 and b <= 3:
+                px[x, y] = (*OFF_BLACK, a)
+    return im
 
 
 def clamp(v):
@@ -31,7 +51,7 @@ class Atlas:
         return Tile(self, self.names.index(name))
 
     def save(self, path):
-        self.im.save(path)
+        soften_extremes(self.im).save(path)
 
 
 class Tile:

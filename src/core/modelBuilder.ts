@@ -1,7 +1,9 @@
-// A small builder for the models that ship with the editor (props, building kit, trees): boxes, prisms
-// and ready-made meshes textured with the tiles of one atlas, grouped into bones and animations.
+// A small builder for the models that ship with the editor (props, building kit, trees): boxes and ready-made
+// meshes textured with the tiles of one atlas, grouped into bones and animations. The built-in models are made
+// of cubes and quads only (see hytaleStyle.ts): round things are made of turned cubes, with `round`, `clump`
+// and `ringOf` below, never of cylinders, spheres or wedges.
 
-import { type FaceKey, type MeshData, boxMesh, prismMesh } from './mesh';
+import { type FaceKey, type MeshData, boxMesh, mulberry32, prismMesh } from './mesh';
 import { SMOOTH_ANGLE } from './meshModify';
 import type { AnimationClip, Bone, Model, ModelCube, Vec3 } from './types';
 import { type UVPoly, rectUv } from './uv';
@@ -51,7 +53,48 @@ export class ModelBuilder<T extends string> {
     return this.add(name, center, boxMesh(size, null, uv, this.rectOf(base)), rot, bone);
   }
 
-  /** A prism with `sides` sides standing on its center; the caps get their own tile. */
+  /**
+   * A column that reads as round, made of two cubes: one square and one turned 45 degrees, so the outline from
+   * above is an eight-pointed shape (a barrel, a tower, a trunk, a log's end). Both are cubes.
+   */
+  round(name: string, center: Vec3, size: Vec3, look: Look<T>, bone: string | null = null, turned = 0.9): void {
+    this.box(name, center, size, look, [0, 0, 0], bone);
+    // a little lower at the top so the two tops do not fight over the same pixels
+    this.box(`${name} turned`, [center[0], center[1] - 0.005, center[2]], [size[0] * turned, size[1] - 0.01, size[2] * turned], look, [0, 45, 0], bone);
+  }
+
+  /**
+   * A clump of cubes at slightly different angles: foliage, a rock, a bush. The first is the core, the others sit
+   * around it, smaller and turned about. Always the same for the same `seed`.
+   */
+  clump(name: string, center: Vec3, size: Vec3, look: Look<T>, seed = 1, pieces = 3, bone: string | null = null): void {
+    const rnd = mulberry32(seed * 7919 + 13);
+    this.box(name, center, size, look, [0, Math.round(rnd() * 50 - 25), 0], bone);
+    for (let i = 1; i < pieces; i++) {
+      const k = 0.55 + rnd() * 0.25;
+      const at: Vec3 = [
+        center[0] + (rnd() - 0.5) * size[0] * 0.75,
+        center[1] + (rnd() - 0.3) * size[1] * 0.45,
+        center[2] + (rnd() - 0.5) * size[2] * 0.75,
+      ];
+      const turn: Vec3 = [Math.round((rnd() - 0.5) * 30), Math.round(rnd() * 70 - 35), Math.round((rnd() - 0.5) * 30)];
+      this.box(`${name} ${i + 1}`, at, [size[0] * k, size[1] * (k + 0.1), size[2] * k], look, turn, bone);
+    }
+  }
+
+  /** `count` cubes standing in a ring (in the plane of the XY axes when `upright`, else on the ground). */
+  ringOf(name: string, center: Vec3, radius: number, count: number, size: Vec3, look: Look<T>, upright = false, bone: string | null = null): void {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2;
+      const deg = (a * 180) / Math.PI;
+      const at: Vec3 = upright
+        ? [center[0] + Math.cos(a) * radius, center[1] + Math.sin(a) * radius, center[2]]
+        : [center[0] + Math.cos(a) * radius, center[1], center[2] + Math.sin(a) * radius];
+      this.box(`${name} ${i + 1}`, at, size, look, upright ? [0, 0, deg] : [0, -deg, 0], bone);
+    }
+  }
+
+  /** A prism with `sides` sides standing on its center; the caps get their own tile. (Not used by the built-in models.) */
   prism(name: string, center: Vec3, sides: number, radius: number, height: number, side: T, cap: T, bone: string | null = null): ModelCube {
     const mesh = prismMesh(sides, radius, height, this.rectOf(side));
     this.spreadCaps(mesh, radius, cap);

@@ -222,16 +222,15 @@ off for them if you want the player to walk through. `python3 tools/make-props.p
 are described in `src/core/props.ts`. Older projects get the props once when they are opened.
 
 The atlas also holds tiles that no model uses (ore, bark, leaves, planks, cobblestone, ...): they are there to
-paint on shapes with the Paint tool. There are deliberately **no trees and no stacked-cube building blocks** among
-the models; scenery and building parts are meant to be modeled shapes, not voxels.
+paint on shapes with the Paint tool.
 
 ### Models as files, and the demo (Mossy Hills)
 
 Every `assets/models/*.json` is a model (the same JSON a project keeps for its models) that is part of every new
 project, like the props and the building kit. Drop a file there and rebuild to add one. The ones that ship are the
-irregular low-poly models of the demo (`tools/make-demo.py` makes them, the demo atlas `Demo-16.png` and the
-splash picture): **Star crystal** (spins, collectible), **Crystal cluster**, **Ruin column** (broken, with a rune
-band) and **Thorn spikes**. Models are an older project's too: projects from before version 10 get them once.
+models of the demo (`tools/make-demo.py` makes them, the demo atlas `Demo-16.png` and the splash picture), made of
+cubes like the others: **Star crystal** (spins, collectible), **Crystal cluster**, **Ruin column** (broken, with a
+rune band) and **Thorn spikes**. Models are an older project's too: projects from before version 10 get them once.
 
 **Example: Mossy Hills** (File > New project > Example) is made of the same data as any project, so it can be
 opened and changed:
@@ -247,19 +246,44 @@ female character as `Character-Female-Explorer.png`.)
 
 ### Building kit and trees (Models)
 
-Besides the props, every project has about 30 **modeled** building parts and trees (`Kit-16.png`, `src/core/kit.ts`):
-real shapes (arches, tapered cylinders, cones, spheres, stairs), not stacks of cubes.
+Besides the props, every project has about 30 building parts and trees (`Kit-16.png`, `src/core/kit.ts`), built the
+way the Hytale art team asks for (see **How the built-in models are made** below): chunky cubes, turned to make
+angles (a roof is two turned slabs, a crown of leaves is a clump of turned cubes), steps instead of ramps.
 
 | Group | Models |
 | --- | --- |
 | Walls and pieces | Stone wall, Stone pillar, Archway, Stone stairs, Wooden stairs, Flagstone slab, Cobble path, Iron gate, Wooden fence |
 | Buildings | Cottage (timber frame, gable roof, shutters, chimney), Round tower, Roof piece, Chimney, Stone bridge, Wooden bridge, Market stall, Windmill (`turn`), Lighthouse |
 | Rocks | Large boulder, Standing ring |
-| Trees and plants | Oak, Cherry, Autumn, Pine, Birch, Palm and Dead tree (tapered trunks, round crowns, cones), Round bush, Hedge, Tree stump, Fallen log, Giant mushroom |
+| Trees and plants | Oak, Cherry, Autumn, Pine, Birch, Palm and Dead tree (a trunk of cubes, crowns of turned cubes, tiers for the pine), Round bush, Hedge, Tree stump, Fallen log, Giant mushroom |
 
 Parts are meant to be combined: copy a wall along a line, put an archway in it, a tower at the corner. Stairs,
-arches and bridges are collided as real surfaces, and the player walks up the stairs. `python3 tools/make-kit.py`
-redraws the atlas.
+arches and bridges are collided as the cubes they are made of, and the player walks up the stairs.
+`python3 tools/make-kit.py` redraws the atlas.
+
+### How the built-in models are made (the Hytale guide)
+
+Every built-in model - the two characters, the pickups, the props, the kit and the demo models - follows
+[An Introduction to Making Models for Hytale](https://hytale.com/news/2025/12/an-introduction-to-making-models-for-hytale)
+(Hypixel Studios, December 2025), taken as the rule for making models:
+
+| Rule | In PolyHop |
+| --- | --- |
+| **Cubes and quads only** | A model is made of cubes (6 sides) and quads (2 sides, a flat rectangle). No triangles, wedges, pyramids, cones, cylinders, spheres, bevels, edge loops, no skewed or tapered boxes. Angles are made by turning cubes. |
+| **No spheres** | Round things are two cubes, one turned 45° (a barrel, a tower, a stump), a clump of turned cubes (foliage, a boulder), or a ring of cubes (the standing ring). |
+| **Chunky, toylike** | Small, bulky, iconic shapes; a pure silhouette; no thin "realistic" 1 px details (a cube thinner than one texel is a quad). The characters have a head of about a fifth of the body and plain cube limbs. |
+| **Triangle budget** | T1 about 8 triangles (leaves, grass: a sprite is 2 quads), T2 up to 50 (a mushroom, a coin), T3 under 400 (furniture, a house, a tree, a character), T4 about 1000 (bosses). A cube is 12 triangles, a quad 2. Every built-in model is T3 or less. |
+| **Texel density** | Characters 64 px per unit, props and blocks 32 px per unit; do not stretch a part more than 0.7 - 1.3 times on an axis. |
+| **Colors and painting** | No pure white and no pure black (the atlases and skins have none); shadows carry color, not plain grey; light, shadow and ambient occlusion are painted into the texture; no noise, no perfectly flat surfaces; a soft touch on a crisp pixel base. |
+
+`src/core/hytaleStyle.ts` is the rule as code: `checkModel` says how many cubes and quads a model has, its triangles
+and tier, and what breaks a rule. The **Style** section of the Models tab shows it for the open model (and what is
+against the guide, by shape), and `tests/builtInStyle.test.ts` runs it over every built-in model, so a model that
+breaks the guide does not ship. The guide is a best practice, not a law: the editor still lets you build anything
+(cylinders, spheres, bevels ...), and such a model works in a game.
+
+When a built-in model is redrawn, a saved project gets the new one (version 14): a copy that is still exactly the old
+built-in one is swapped; a copy you changed (shapes moved, painted differently) stays as it was.
 
 ### Renaming
 
@@ -332,7 +356,9 @@ into the file too, so it looks the same on another machine.
 
 **Starting.** The first time the editor opens (and with **New project**) a dialog offers **Blank project** (an empty
 level with a floor) or **Example: Mossy Hills**, a small two-level game made with what the editor offers (below).
-Closing the dialog keeps what is open.
+Closing the dialog keeps what is open. A blank project has the 13 game objects (Assets > Game objects) and, in
+**Models**, the two characters and the models those game objects are made of (coin, key, apple, flag, trophy, slime,
+villager), so any of them can be opened and changed; the props and the building kit are added when you place one.
 
 The top bar shows the file name and `unsaved changes` when the project differs from the file. The
 project is also autosaved in the browser as a backup, which only matters if you forget to Save.
@@ -635,8 +661,8 @@ sound for the player's footsteps by surface.
 - Project format is human-readable JSON; game logic is data (events → actions), not a scripting language.
   An optional script component can come later.
 - Grid snap by default with free placement available. Shapes are polygon meshes you can edit (extrude, inset, loop cut ...).
-- Not a voxel engine: no Minecraft-style cube worlds. Building parts and scenery are modeled shapes; blocky props are
-  fine as props.
+- The built-in models are cubes and quads in the style of the Hytale modeling guide (see above); levels and terrain
+  are not voxels: terrain is a sculptable mesh and blocks are meshes you can shape.
 - Third-person camera, keyboard + mouse and gamepad. English UI.
 - Built-in sfxr-style sound generator, plus import.
 
