@@ -43,8 +43,8 @@ The top bar switches between the editors:
 
 | Mode | What it does |
 | --- | --- |
-| **Level** | Place blocks, model instances and the player spawn. Assets explorer, drag a model into the view, Play. |
-| **Models** | Build a model from cubes, pick its texture, map each face to the texture (UV). |
+| **Level** | Place objects, instances of components and the player spawn. The Assets dock is under the view, drag an asset into it, Play. |
+| **Models** | Build a model from cubes, pick its texture, tile it or map each face to the texture (UV), make it a component. |
 | **Paint** | Paint whole texture atlases. New / import / duplicate / delete textures. |
 | **Animate** | Keyframe clips for models with bones (the player's walk, a spinning coin, a door). |
 | **Audio** | Synthesized sound effects, chip-tune music, imported sound files. |
@@ -53,7 +53,7 @@ The top bar switches between the editors:
 
 Everything the game does is data, no scripting. There are two parts.
 
-**Variables** (left panel > *Variables*): numbers the game keeps track of, such as `coins`, `keys` and
+**Variables** (*Project Settings > Variables*): numbers the game keeps track of, such as `coins`, `keys` and
 `health`. Each has a start value, an optional min and max (health 0 – 3), and can be shown on the screen
 with an icon and a label while playing.
 
@@ -100,10 +100,36 @@ Door preset is written: *locked* first, then *opens and uses the key*).
 - **Timers** count from the start of the level. *Conditions become true* fires once when its tests turn
   from false to true (and again if they turn false and true again), for example "coins >= 5, open the gate".
 
-### Game objects as assets
+### Objects and components
 
-Every game object is an **asset** in *Assets > Game objects*, next to the models. Click one to edit it in
-Properties (look and behavior), double-click it or drag it into the view to place it.
+Everything you place is a **3D object**: a shape you added in the level, or a model. It is **yellow** in the scene list
+and in the Assets: an ordinary object, which belongs to its place. Select it and press **Make component** and it
+becomes a **master component** (**purple**, a filled diamond ◆) like a component of Figma or a prefab of Unity:
+
+| | What it is | Mark |
+| --- | --- | --- |
+| **Object** | an ordinary object: edit it in the Level with every tool (vertices, faces, size ...) or open it in Models | yellow ▣ (★ when it has rules) |
+| **Component** | the master, kept in the Assets; place it as many times as you like | purple card in the Assets |
+| **Master placement** | the placement a component was made from; it stays where it was | purple ◆ in the scene list |
+| **Instance** | a placement of a component: it follows every change of it | purple ◇ in the scene list |
+| **Variant** | a component made from another one: the same shapes with a look and a behavior of its own | purple card, ◆⁺ |
+
+- **Place:** double-click an asset or drag it into the view; **Place in level** in the Assets. A component makes a linked
+  instance; an ordinary model placed a second time gets shapes of its own (a copy). Ctrl+D of an instance makes another
+  instance; of an ordinary object a copy with shapes of its own.
+- **Edit the master** in the Models tab (**Open master in Models** on any instance): every instance follows. The shapes of an
+  instance cannot be edited; it has its own place, turn, scale, size, tint, animation, solid and rules.
+- **Behavior is shared too.** What a component does by default (rules, solid, animation, and the size a placement starts at) is
+  edited on the master placement or in the component's properties (select it in the Assets): every instance follows,
+  except what an instance sets itself (marked *set here*; **Reset to component** takes it back).
+- **Detach** turns an instance into an ordinary object with shapes of its own. **Not a component** makes a model ordinary again.
+- **Size of a master** (a component of one shape) resizes the component: all instances follow, and a tile keeps its size.
+- **Variants:** *Make variant* (component properties) creates a component with the shapes of the original and its own look
+  (another tile or tint, another texture of the same layout) and behavior.
+- **Components inside components:** in Models, *Components inside > + Add a component…* places other components (the same
+  texture and mapping) inside this one, moved, turned and scaled: a house made of walls, a roof and a door.
+
+**The game objects** are components that come with every project (in the Assets, purple):
 
 | Built-in | What it does |
 | --- | --- |
@@ -121,24 +147,21 @@ Properties (look and behavior), double-click it or drag it into the view to plac
 | Villager | a character that talks when the player presses Interact next to it |
 | Sign | a wooden board; pressing Interact next to it shows its message (“E: interact” appears when you are close) |
 
-- **Edit an asset:** name, tint, solid, size, texture (blocks) or model, animation (pickups), and all its rules.
-  What you place afterwards follows it. **Reset** puts a built-in one back as it came.
-- **Your own assets:** *+ New object…* asks what it is made of: a **plain block** or **one of your models**
-  (a crate, a creature, ...), then you give it a behavior. **Looks like** at the top of an asset's Properties
-  changes that later (block <-> any model; the rules are kept). Or select any object in the level and press
-  **Make an asset** in its Properties (shape, look and behavior are kept). **Duplicate** copies an asset,
-  **Delete** removes your own (placed objects stay).
-- **Placed objects remember their asset.** In the asset, **Update N placed** brings every object placed from it,
-  in all levels, in line with it (rules, solid, texture, tint, model, animation). Position, turn, size and name
-  of each object stay. On a single object, **Update from asset** does the same and **Save to asset** makes the
-  asset take over the object (also its shape and size).
-- The asset list is part of the project file, so your changes travel with it.
+Placing one brings the variables and sounds its rules use. **Reset** (component properties) puts a built-in one back as
+it came. The older *Game objects* list is gone: projects from before version 17 are converted when opened (an asset
+became a component, objects that were placed keep what they have).
+
+**Tile or UV.** Every model has a **mapping** (*Models > Component > Mapping*, or the component properties):
+**Tile** repeats one tile of the texture over every face, once per meter, and keeps its size when the object is made bigger
+(walls, floors, doors, water). **UV** gives each face its own part of the texture (characters, props you paint). Switching to
+Tile keeps the tile the first face showed; switching to UV stretches the tile over each face (a UV cannot repeat, a face of one
+meter looks the same). A model with bones is always UV.
 
 The rules of a preset can also be put on any object with *Behavior > Make this a…*.
 
 Pickups are ordinary models (`Items-16.png` atlas, a spinning animation), so they can be re-textured and
 re-animated in the Models and Animate tabs. A new project is blank: place a game object from Assets and it brings its
-variables and its sounds with it (and its model, if it is not in Models).
+variables and its sounds with it.
 While playing, the HUD (top right) shows the variables marked *On screen*, with messages at the bottom.
 Objects taken away or moved during a run come back when you stop (the game plays a copy of the level).
 
@@ -210,17 +233,15 @@ other clip is yours to use. Edits show up the next time you press Play, no expor
 
 ### Built-in models (Models)
 
-A new project is **blank**: a flat ground and nothing else. Its **Models** (and Assets > Models) hold only what the
-13 game objects are made of, so each of them can be opened and edited: the two humanoids (male and female, with their
-skins, rig and animations), the pickups (**Coin**, **Key**, **Apple**, **Flag**, **Trophy**), the **Slime** and the
-**Villager**. They are ordinary models, made of cubes: place them, re-texture them, change their cubes, animate
-them, or build a game object asset from one (*Assets > + New object… > Made of a model*). The other game objects
-(Door, Hazard, Exit, Moving platform, Sign, Water) are plain cube blocks, so their look is a block's tile, tint and
-shape.
+A new project is **blank**: a flat ground and nothing else. Its **Models** (and the Assets under the view) hold the
+characters and the 13 game objects, so each of them can be opened and edited: the two humanoids (male and female, with
+their skins, rig and animations) and the components of the table above. They are made of cubes: place them, re-texture
+them, change their cubes, animate them, or make a variant of one (*Assets > the component > Make variant*). Door, Hazard,
+Exit, Moving platform, Sign and Water are one-shape models with the Tile mapping.
 
-If a game object's model is not in Models (you deleted it, or the project is an older one), placing the game object
-or pressing **Edit model** on it puts the built-in one back. Some come with animations (pick them in a placed
-instance's **Animation**): Slime `hop`, Villager `idle`, the pickups `spin`.
+If a built-in model is not in Models (you deleted it, or the project is an older one), placing it or pressing **Edit
+model** on it puts the built-in one back. Some come with animations (pick them in a placed instance's **Animation**): Slime
+`hop`, Villager `idle`, the pickups `spin`.
 
 Every texture stays: `Textures-16`, `Seamless-16`, `Props-16` (furniture, ore, plants, potions, gems ...),
 `Kit-16` (walls, roofs, bricks, water), `Items-16`, `Plants-16`, `Demo-16` (crystal, ruin stone, runes) and the
@@ -330,8 +351,8 @@ into the file too, so it looks the same on another machine.
 **New empty project**, **Open project…**, and **Continue** with the project of your last session (when there is one).
 Esc or a click outside keeps what is open. *Show this screen when PolyHop starts* turns it off; it comes back from
 the PolyHop logo in the top bar or **File > Welcome screen…**. A new project is a **blank** one: one level with a flat
-ground to stand on, the theme as the game's music and the 13 game objects (Assets > Game objects). Its Models are the
-two humanoids, the five pickups, the Slime and the Villager, and nothing else. If the project that is open has changes
+ground to stand on, the theme as the game's music and the 13 game objects as components (Assets). Its Models are the
+two humanoids and those 13 components, and nothing else. If the project that is open has changes
 that are not saved to a file, starting another one asks first.
 
 The top bar shows the file name and `unsaved changes` when the project differs from the file. The
@@ -388,12 +409,12 @@ background color; the title is the project name.
 
 `player.js` is built by `npm run build:player` (runs automatically before `dev` and `build`).
 
-**The export is trimmed.** Only what the game plays goes into `index.html`: the game objects kept as assets
-(Assets > Game objects), models nobody places or wears, textures nothing draws and sounds nothing plays are left
-out (the project in the editor is not touched). The default project goes from about 1.2 MB to 0.5 MB.
+**The export is trimmed.** Only what the game plays goes into `index.html`: models nobody places or wears (variants keep the
+component they are made from), the default behavior of components, textures nothing draws and sounds nothing plays are
+left out (the project in the editor is not touched). The default project goes from about 1.2 MB to 0.5 MB.
 
-**Project Settings** has tabs: **General** (title, start fullscreen, resolution), **Menu**, **Splash**, **Controls**
-(mouse, gamepad and the keys) and **Sound** (music and volume). The dialog opens on the tab you left it on.
+**Project Settings** has tabs: **General** (title, start fullscreen, resolution), **Variables** (the numbers of the game),
+**Menu**, **Splash**, **Controls** (mouse, gamepad and the keys) and **Sound** (music and volume). The dialog opens on the tab you left it on.
 
 **Menu screen.** *Project Settings > Menu* is the first screen of the exported game: your **logo** with **Start game**
 and **Settings** under it. Pick a logo picture (PNG, JPEG, GIF or WebP, up to 1024 × 512, bigger ones are made

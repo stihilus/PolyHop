@@ -41,6 +41,8 @@ import { makeSplitter } from './ui/splitter';
 import { TransformBar } from './ui/transformBar';
 import { appConfirm } from './ui/dialogs';
 import { facesInMarquee, marqueeOf, mergeSelection, verticesInMarquee } from './boxSelect';
+import { isComponent, isTiled, makesCycle } from '../core/components';
+import { buildModelLookEditor, componentBadge } from './ui/modelLook';
 import { AxisGizmo, buildViewMenu } from './ui/viewControls';
 
 const SNAP_OPTIONS = [
@@ -1129,7 +1131,7 @@ export class ModelEditor {
             'data-model-id': m.id,
             title: 'Double-click to rename',
           },
-          el('span', { class: 'tree-icon', text: '▣' }),
+          el('span', { class: `tree-icon${m.component ? ' icon-component' : ''}`, text: m.component ? '◆' : '▣' }),
           el('span', { class: 'tree-label', text: m.name }),
           el('span', { class: 'tree-count muted', text: `${m.cubes.length}` }),
         ),
@@ -1182,7 +1184,7 @@ export class ModelEditor {
     }
     select.value = model.texture ?? '';
     select.addEventListener('change', () => {
-      model.texture = select.value;
+      model.texture = select.value || null;
       this.structuralChange('edit:texture');
       this.refreshInspector();
     });
@@ -1206,7 +1208,7 @@ export class ModelEditor {
       ),
     );
 
-    this.inspectorEl.append(this.buildRigSection(model), this.buildStyleSection(model));
+    this.inspectorEl.append(this.buildComponentSection(model), this.buildPartsSection(model), this.buildRigSection(model), this.buildStyleSection(model));
 
     // ---- selected shape
     const cube = this.cube;
@@ -1286,7 +1288,17 @@ export class ModelEditor {
       ),
     );
 
-    // ---- uv of the selected face
+    // ---- uv of the selected face (a tile-mapped model has none: every face repeats the tile of its look)
+    if (isTiled(model)) {
+      this.inspectorEl.append(
+        el('div', { class: 'section-title', text: 'Texture' }),
+        el('div', {
+          class: 'empty muted',
+          text: 'This model uses Tile mapping: every face repeats the tile chosen under Component > Look. Switch the mapping to UV to give each face its own part of the texture.',
+        }),
+      );
+      return;
+    }
     const info = this.texInfo();
     this.uvHeading = el('div', { class: 'section-title', text: this.uvHeadingText(cube) });
     this.inspectorEl.append(this.uvHeading);
@@ -1348,6 +1360,137 @@ export class ModelEditor {
     );
     this.uvView.redraw();
     this.focusUv();
+  }
+
+  /** Component, variant or ordinary object: what it is, and the look (mapping, tile, tint) the placements share. */
+  private buildComponentSection(model: Model): HTMLElement {
+    const root = el('div', { class: 'component-section' });
+    const comp = isComponent(model);
+    const base = model.variantOf ? this.store.getModel(model.variantOf) : undefined;
+    root.append(el('div', { class: 'section-title', text: comp ? 'Component' : 'Object' }));
+    if (comp) {
+      root.append(
+        componentBadge(
+          model.variantOf
+            ? `A variant of “${base?.name ?? 'a missing component'}”: the shapes of the component, with a look and a behavior of its own.`
+            : 'A master. It is placed from the Assets as linked instances: they all follow what you change here.',
+          'master',
+        ),
+      );
+    } else {
+      root.append(componentBadge('An ordinary object. Make it a component to place linked instances of it.', 'object'));
+    }
+    const buttons = el('div', { class: 'button-stack row' });
+    buttons.append(
+      el('button', {
+        class: 'btn component-btn',
+        text: comp ? 'Not a component' : 'Make component',
+        title: comp ? 'Back to an ordinary object (its placements stay, but stop following it)' : 'Keep it in the Assets and place linked instances of it',
+        onclick: () => {
+          this.store.setComponent(model.id, !comp);
+          this.refreshInspector();
+          this.refreshModelList();
+        },
+      }),
+    );
+    if (base) {
+      buttons.append(el('button', { class: 'btn', text: `Open “${base.name}”`, onclick: () => this.open(base.id) }));
+    }
+    root.append(buttons);
+    root.append(
+      buildModelLookEditor({
+        model,
+        textures: this.textures,
+        onChange: (what) => {
+          this.structuralChange('edit:look');
+          if (what === 'mapping') this.refreshInspector();
+        },
+        rerender: () => this.refreshInspector(),
+      }),
+    );
+    return root;
+  }
+
+  /** Components placed inside this one: a house made of walls, a roof and a door. */
+  private buildPartsSection(model: Model): HTMLElement {
+    const root = el('div', { class: 'parts-section' });
+    const parts = model.parts ?? [];
+    root.append(el('div', { class: 'section-title', text: `Components inside${parts.length > 0 ? ` · ${parts.length}` : ''}` }));
+    if (parts.length === 0) {
+      root.append(el('div', { class: 'empty muted', text: 'Other components can be placed inside this one. They follow their own master.' }));
+    }
+    const models = this.store.project.models;
+    parts.forEach((part, index) => {
+      const target = this.store.getModel(part.modelId);
+      const view = { name: part.name, position: part.position, rotation: part.rotation, scale: part.scale };
+      const form = buildForm(
+        [
+          { kind: 'text', key: 'name', label: 'Name' },
+          { kind: 'vec3', key: 'position', label: 'Position', step: 0.5, unit: 'm' },
+          { kind: 'vec3', key: 'rotation', label: 'Rotation', step: 15, unit: '°' },
+          { kind: 'vec3', key: 'scale', label: 'Scale', step: 0.1 },
+        ],
+        view as unknown as Record<string, unknown>,
+        () => {
+          part.name = view.name;
+          this.structuralChange('edit:part');
+        },
+      );
+      root.append(
+        el(
+          'div',
+          { class: 'part-card' },
+          el('div', { class: 'muted', text: `◆ ${target?.name ?? 'a missing component'}` }),
+          form,
+          el(
+            'div',
+            { class: 'button-stack row' },
+            ...(target ? [el('button', { class: 'btn', text: 'Open', onclick: () => this.open(target.id) })] : []),
+            el('button', {
+              class: 'btn danger',
+              text: 'Remove',
+              onclick: () => {
+                model.parts = parts.filter((_, i) => i !== index);
+                if (model.parts.length === 0) delete model.parts;
+                this.structuralChange('remove-part');
+                this.refreshInspector();
+              },
+            }),
+          ),
+        ),
+      );
+    });
+
+    // components that fit: the same texture and the same mapping, and no loop
+    const mapping = model.mapping ?? 'uv';
+    const fits = models.filter(
+      (m) =>
+        m.id !== model.id &&
+        isComponent(m) &&
+        (m.mapping ?? 'uv') === mapping &&
+        (model.texture === null || m.texture === model.texture || m.variantOf !== undefined) &&
+        !makesCycle(models, model.id, m.id),
+    );
+    const add = el('select', { title: 'Place a component inside this one' });
+    add.append(el('option', { value: '', text: '+ Add a component…' }));
+    for (const m of fits) add.append(el('option', { value: m.id, text: m.name }));
+    add.addEventListener('change', () => {
+      const child = this.store.getModel(add.value);
+      add.value = '';
+      if (!child) return;
+      if (model.texture === null && child.texture) model.texture = child.texture;
+      model.parts = [
+        ...(model.parts ?? []),
+        { id: newId(), name: child.name, modelId: child.id, position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      ];
+      this.structuralChange('add-part');
+      this.refreshInspector();
+    });
+    root.append(el('div', { class: 'button-stack' }, add));
+    if (fits.length === 0 && parts.length === 0) {
+      root.append(el('div', { class: 'empty muted', text: 'No component fits yet: it needs the same texture and the same mapping (Tile or UV).' }));
+    }
+    return root;
   }
 
   /**

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { meshBounds } from '../core/mesh';
-import type { LevelData, LevelObject, Project, Vec3 } from '../core/types';
+import { resolveModel } from '../core/components';
+import type { LevelData, LevelObject, Model, Project, Vec3 } from '../core/types';
 import { keyLabel } from '../core/keys';
 import { Avatar, IDLE_MOTION, type Motion } from './avatar';
 import { AudioEngine } from './audio';
@@ -241,7 +242,12 @@ export class Game {
     return this.live ?? this.project.levels[this.levelIndex]!.objects;
   }
 
-  private getModel = (id: string) => this.project.models.find((m) => m.id === id);
+  /** A model as it is drawn and collides (variants and nested components resolved). */
+  private getModel = (id: string): Model | undefined => {
+    const raw = (i: string) => this.project.models.find((m) => m.id === i);
+    const m = raw(id);
+    return m ? resolveModel(m, raw) : undefined;
+  };
 
   /** Colliders of the objects now (call after the level's objects changed in the editor). */
   /** Ids of objects that change place by themselves; they are collided separately, every frame. */

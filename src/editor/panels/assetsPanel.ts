@@ -1,19 +1,46 @@
-// The Assets list: game objects and models as cards with a picture, to select, rename, place and drag.
+// The Assets dock: every model of the project as a card with a picture, to select, rename, place and drag. A card is
+// purple when it is a component (a master that is placed as linked instances) and yellow when it is an ordinary object.
 
-import { type Prefab, type TileRef, builtInModelById } from '../../core/types';
-import { ModelRender } from '../../runtime/modelRender';
+import { instancesOf, isComponent } from '../../core/components';
+import type { Model } from '../../core/types';
 import { Thumbnailer } from '../thumbnails';
-import { MODEL_DRAG_MIME, PREFAB_DRAG_MIME } from '../viewport';
+import { MODEL_DRAG_MIME } from '../viewport';
 import { clear, el } from '../ui/dom';
 import { renameInline } from '../ui/rename';
 import type { PanelHost } from './host';
 
+type Kind = 'all' | 'components' | 'objects';
+
 export class AssetsPanel {
-  readonly element = el('div', { class: 'assets hidden' });
+  readonly element = el('div', { class: 'assets-dock' });
   private thumbnailer: Thumbnailer | null = null;
   private thumbs = new Map<string, string>();
+  private filter = '';
+  private kind: Kind = 'all';
+  private grid = el('div', { class: 'asset-grid' });
+  private head = el('div', { class: 'assets-head' });
+  private searchEl = el('input', { type: 'search', class: 'scene-filter assets-search', placeholder: 'Find an asset…', title: 'Show only the assets whose name has this in it' });
+  private countEl = el('span', { class: 'muted assets-count' });
 
-  constructor(private host: PanelHost) {}
+  /** The dock was asked to fold or unfold. */
+  onToggle?: () => void;
+
+  constructor(private host: PanelHost) {
+    this.searchEl.addEventListener('input', () => {
+      this.filter = this.searchEl.value;
+      this.renderGrid();
+    });
+    this.searchEl.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape') {
+        this.searchEl.value = '';
+        this.filter = '';
+        this.renderGrid();
+      }
+    });
+    this.element.append(this.head, this.grid);
+    this.buildHead();
+  }
 
   // ---- thumbnails (rendered once and kept until what they show changes)
 
@@ -24,11 +51,8 @@ export class AssetsPanel {
 
   dropThumb(id: string): void {
     this.thumbs.delete(id);
-  }
-
-  /** The pictures of the game objects made of a plain block. */
-  dropPrefabThumbs(): void {
-    for (const k of [...this.thumbs.keys()]) if (k.startsWith('prefab:')) this.thumbs.delete(k);
+    // a variant or a holder is drawn from the shapes of this one
+    for (const dep of this.host.store.dependents(id)) this.thumbs.delete(dep);
   }
 
   private thumbnailFor(modelId: string): string {
@@ -46,78 +70,46 @@ export class AssetsPanel {
     return url;
   }
 
-  /** A thumbnail of a flat game object: the tile it shows (tinted), drawn at 64 px. */
-  private tileThumbnail(tile: TileRef | null, color: string, key: string): string {
-    const cached = this.thumbs.get(key);
-    if (cached !== undefined) return cached;
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return '';
-    let ready = true;
-    ctx.imageSmoothingEnabled = false;
-    const info = tile ? this.host.textures.get(tile.texture) : null;
-    const image = info?.texture.image as (CanvasImageSource & { complete?: boolean }) | undefined;
-    if (tile && info && image && image.complete !== false) {
-      const ts = info.tileSize;
-      ctx.drawImage(image, tile.col * ts, tile.row * ts, ts, ts, 0, 0, 64, 64);
-    } else {
-      ready = !tile; // an atlas that has not loaded yet: draw a plain square and look again later
-      ctx.fillStyle = '#6c7380';
-      ctx.fillRect(0, 0, 64, 64);
-    }
-    if (color.toLowerCase() !== '#ffffff') {
-      ctx.globalCompositeOperation = 'multiply';
-      ctx.fillStyle = color;
-      ctx.fillRect(0, 0, 64, 64);
-    }
-    const url = canvas.toDataURL('image/png');
-    if (ready) this.thumbs.set(key, url);
-    return url;
+  // ---- the head: title, search, filter, actions
+
+  private buildHead(): void {
+    const { host } = this;
+    const chip = (kind: Kind, label: string, title: string) => {
+      const b = el('button', { class: `chip${this.kind === kind ? ' active' : ''}`, text: label, title, 'data-kind': kind });
+      b.addEventListener('click', () => {
+        this.kind = kind;
+        for (const c of this.head.querySelectorAll('.chip')) c.classList.toggle('active', c.getAttribute('data-kind') === kind);
+        this.renderGrid();
+      });
+      return b;
+    };
+    clear(this.head);
+    this.head.append(
+      el('button', { class: 'dock-toggle', text: '▾', title: 'Fold the Assets (double-click the title)', onclick: () => this.onToggle?.() }),
+      el('span', { class: 'assets-title', text: 'Assets', ondblclick: () => this.onToggle?.() }),
+      this.countEl,
+      this.searchEl,
+      chip('all', 'All', 'Components and objects'),
+      chip('components', '◆ Components', 'Masters you place as linked instances'),
+      chip('objects', '▣ Objects', 'Ordinary models'),
+      el('span', { class: 'spacer' }),
+      el('button', { class: 'btn', text: 'Place', title: 'Add the selected asset to the level', onclick: () => this.placeSelected() }),
+      el('button', { class: 'btn', text: 'Edit in Models', title: 'Open the selected asset in the model editor', onclick: () => this.editSelected() }),
+      el('button', { class: 'btn', text: '+ New object', title: 'A new model to build in the Models tab', onclick: () => host.newModel() }),
+    );
   }
 
-  /** A picture of a built-in model the project does not have (yet): a game object looks right before it is placed. */
-  private builtInThumbnail(modelId: string, key: string): string {
-    const cached = this.thumbs.get(key);
-    if (cached !== undefined) return cached;
-    let url = '';
-    try {
-      const model = builtInModelById(modelId);
-      if (model) {
-        this.thumbnailer ??= new Thumbnailer(96);
-        const render = new ModelRender(model, this.host.textures);
-        url = this.thumbnailer.render(render);
-        render.dispose();
-      }
-    } catch (err) {
-      console.warn('thumbnail failed', err);
-    }
-    this.thumbs.set(key, url);
-    return url;
+  private placeSelected(): void {
+    const id = this.host.selectedAssetId;
+    if (id) this.host.placeModel(id, this.host.viewport.viewCenterPoint());
   }
 
-  private prefabThumbnail(p: Prefab): string {
-    const o = p.object;
-    if (o.kind === 'model') {
-      return this.host.store.getModel(o.modelId) ? this.thumbnailFor(o.modelId) : this.builtInThumbnail(o.modelId, `prefab:${p.id}`);
-    }
-    return this.tileThumbnail(o.tile, o.color, `prefab:${p.id}`);
+  private editSelected(): void {
+    const id = this.host.selectedAssetId ?? this.host.store.project.models[0]?.id ?? null;
+    if (id) this.host.openModel(id);
   }
 
   // ---- renaming in place
-
-  private renamePrefab(id: string): void {
-    const { store } = this.host;
-    const prefab = store.getPrefab(id);
-    const label = this.element.querySelector<HTMLElement>(`[data-prefab-id="${id}"] .asset-name`);
-    if (!prefab || !label) return;
-    renameInline(label, prefab.name, (name) => {
-      prefab.name = name;
-      store.prefabChanged(id);
-      this.host.refreshAssets();
-      this.host.refreshInspector();
-    });
-  }
 
   private renameModel(id: string): void {
     const { store } = this.host;
@@ -126,6 +118,7 @@ export class AssetsPanel {
     if (!model || !label) return;
     renameInline(label, model.name, (name) => {
       model.name = name;
+      store.componentChanged(id, 'edit:name');
       store.modelChanged(id, false);
       this.host.refreshAssets();
       this.host.refreshInspector();
@@ -135,80 +128,68 @@ export class AssetsPanel {
   // ---- the list
 
   render(): void {
+    this.renderGrid();
+  }
+
+  private cardOf(m: Model, placed: number): HTMLElement {
     const { host } = this;
-    clear(this.element);
-    host.fillNewObjectSelect();
+    const comp = isComponent(m);
+    const thumb = this.thumbnailFor(m.id);
+    const mark = comp ? '◆' : '▣';
+    const kind = comp ? (m.variantOf ? 'a variant' : 'a component') : 'an ordinary object';
+    const card = el(
+      'div',
+      {
+        class: `asset-card ${comp ? 'asset-component' : 'asset-object'}${host.selectedAssetId === m.id ? ' selected' : ''}`,
+        draggable: true,
+        'data-model-id': m.id,
+        title: `${m.name}: ${kind}${placed > 0 ? `, placed ${placed} time${placed === 1 ? '' : 's'}` : ''}. Click to select, double-click to place, drag into the view. Double-click the name to rename.`,
+      },
+      thumb ? el('img', { src: thumb, alt: m.name, draggable: false }) : el('div', { class: 'asset-empty', text: '∅' }),
+      el('span', { class: 'asset-mark', text: m.variantOf ? `${mark}⁺` : mark }),
+      ...(placed > 0 ? [el('span', { class: 'asset-count', text: `×${placed}` })] : []),
+      el('span', { class: 'asset-name', text: m.name }),
+    );
+    card.addEventListener('click', () => host.selectAsset(m.id));
+    card.addEventListener('dblclick', (e) => {
+      if ((e.target as HTMLElement).classList.contains('asset-name')) {
+        this.renameModel(m.id);
+        return;
+      }
+      host.placeModel(m.id, host.viewport.viewCenterPoint());
+    });
+    card.addEventListener('dragstart', (e) => {
+      e.dataTransfer?.setData(MODEL_DRAG_MIME, m.id);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+    });
+    return card;
+  }
 
-    // game objects: the built-in ones and your own
-    const prefabs = host.store.project.prefabs;
-    this.element.append(el('div', { class: 'tree-group', text: `Game objects (${prefabs.length})` }));
-    const objectGrid = el('div', { class: 'asset-grid' });
-    for (const p of prefabs) {
-      const thumb = this.prefabThumbnail(p);
-      const card = el(
-        'div',
-        {
-          class: `asset-card${host.selectedPrefabId === p.id ? ' selected' : ''}`,
-          draggable: true,
-          'data-prefab-id': p.id,
-          title: `${p.name}: click to edit its look and behavior, double-click to place, drag into the view. Double-click the name to rename.`,
-        },
-        thumb ? el('img', { src: thumb, alt: p.name, draggable: false }) : el('div', { class: 'asset-empty', text: '★' }),
-        el('span', { class: 'asset-name', text: p.name }),
-      );
-      card.addEventListener('click', () => host.selectAsset({ prefab: p.id }));
-      card.addEventListener('dblclick', (e) => {
-        if ((e.target as HTMLElement).classList.contains('asset-name')) {
-          this.renamePrefab(p.id);
-          return;
-        }
-        host.placePrefab(p.id, host.viewport.viewCenterPoint());
-      });
-      card.addEventListener('dragstart', (e) => {
-        e.dataTransfer?.setData(PREFAB_DRAG_MIME, p.id);
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
-      });
-      objectGrid.append(card);
-    }
-    this.element.append(objectGrid);
-
+  private renderGrid(): void {
+    const { host } = this;
     const models = host.store.project.models;
-    this.element.append(el('div', { class: 'tree-group', text: `Models (${models.length})` }));
+    const query = this.filter.trim().toLowerCase();
+    const placedBy = new Map<string, number>();
+    for (const m of models) placedBy.set(m.id, instancesOf(host.store.project.levels, m.id).length);
+
+    const shown = models
+      .filter((m) => (this.kind === 'all' ? true : this.kind === 'components' ? isComponent(m) : !isComponent(m)))
+      .filter((m) => !query || m.name.toLowerCase().includes(query));
+    // components first, then the ordinary objects
+    const ordered = [...shown.filter(isComponent), ...shown.filter((m) => !isComponent(m))];
+    this.countEl.textContent = `${ordered.length}`;
+
+    clear(this.grid);
     if (models.length === 0) {
-      this.element.append(
-        el('div', { class: 'empty muted', text: 'No models yet. Create one in the Models editor, then drag it into the level.' }),
-        el('div', { class: 'button-stack' }, el('button', { class: 'btn primary', text: 'Create a model', onclick: () => host.newModel() })),
+      this.grid.append(
+        el('div', { class: 'empty muted', text: 'No models yet. Build one in the Models tab, or add a shape to the level and make it a component.' }),
       );
       return;
     }
-    const grid = el('div', { class: 'asset-grid' });
-    for (const m of models) {
-      const thumb = this.thumbnailFor(m.id);
-      const card = el(
-        'div',
-        {
-          class: `asset-card${host.selectedAssetId === m.id ? ' selected' : ''}`,
-          draggable: true,
-          'data-model-id': m.id,
-          title: `${m.name}: click to select, double-click to place, drag into the view. Double-click the name to rename.`,
-        },
-        thumb ? el('img', { src: thumb, alt: m.name, draggable: false }) : el('div', { class: 'asset-empty', text: '∅' }),
-        el('span', { class: 'asset-name', text: m.name }),
-      );
-      card.addEventListener('click', () => host.selectAsset({ model: m.id }));
-      card.addEventListener('dblclick', (e) => {
-        if ((e.target as HTMLElement).classList.contains('asset-name')) {
-          this.renameModel(m.id);
-          return;
-        }
-        host.placeModel(m.id, host.viewport.viewCenterPoint());
-      });
-      card.addEventListener('dragstart', (e) => {
-        e.dataTransfer?.setData(MODEL_DRAG_MIME, m.id);
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
-      });
-      grid.append(card);
+    if (ordered.length === 0) {
+      this.grid.append(el('div', { class: 'empty muted', text: 'Nothing matches.' }));
+      return;
     }
-    this.element.append(grid);
+    for (const m of ordered) this.grid.append(this.cardOf(m, placedBy.get(m.id) ?? 0));
   }
 }

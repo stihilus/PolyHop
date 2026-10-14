@@ -110,9 +110,10 @@ describe('the characters in projects', () => {
     const p = createDefaultProject();
     const ids = p.models.map((m) => m.id);
     expect(ids.slice(0, 2)).toEqual([HUMANOID_ID, HUMANOID_FEMALE_ID]);
-    expect(ids.slice(-2)).toEqual(['prop-slime', 'prop-villager']);
+    expect(ids).toContain('prop-slime');
+    expect(ids).toContain('prop-villager');
     expect(ids.filter((id) => id.startsWith('item-'))).toHaveLength(5);
-    expect(ids).toHaveLength(9);
+    expect(ids).toHaveLength(15);
   });
 
   it('an older project gets them once and keeps what it deleted afterwards', () => {

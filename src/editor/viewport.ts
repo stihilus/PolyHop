@@ -10,6 +10,7 @@ import { PadReader } from '../runtime/gamepad';
 import { MenuNav } from '../runtime/menuNav';
 import type { TextureLibrary } from '../runtime/textures';
 import { facesInMarquee, marqueeOf, mergeSelection, verticesInMarquee } from './boxSelect';
+import { dependentsOf } from '../core/components';
 import { CameraNav } from './cameraNav';
 import { Gizmo, type TransformDelta, type TransformTarget } from './gizmo';
 import type { LevelObject } from '../core/types';
@@ -30,7 +31,6 @@ import { AxisGizmo, buildViewMenu } from './ui/viewControls';
 const CLICK_MOVE_TOLERANCE = 4; // px
 const RING_SEGMENTS = 48;
 export const MODEL_DRAG_MIME = 'application/x-polyhop-model';
-export const PREFAB_DRAG_MIME = 'application/x-polyhop-prefab';
 
 const SNAP_OPTIONS = [
   { value: 0, label: 'Snap off' },
@@ -88,8 +88,6 @@ export class Viewport {
   onPlayStats?: (s: GameStats) => void;
   /** A model from the asset explorer was dropped on the view. */
   onDropModel?: (modelId: string, position: Vec3) => void;
-  /** A game object asset was dropped on the view. */
-  onDropPrefab?: (prefabId: string, position: Vec3) => void;
   /** Short status while flying the camera (fly speed). */
   onNavStatus?: (text: string | null) => void;
   /** A tool wants to tell the user something (why it did nothing). */
@@ -279,18 +277,12 @@ export class Viewport {
 
     container.addEventListener('dragover', (e) => {
       const types = e.dataTransfer?.types;
-      if (types?.includes(MODEL_DRAG_MIME) || types?.includes(PREFAB_DRAG_MIME)) {
+      if (types?.includes(MODEL_DRAG_MIME)) {
         e.preventDefault();
         e.dataTransfer!.dropEffect = 'copy';
       }
     });
     container.addEventListener('drop', (e) => {
-      const prefab = e.dataTransfer?.getData(PREFAB_DRAG_MIME);
-      if (prefab) {
-        e.preventDefault();
-        this.onDropPrefab?.(prefab, this.groundPointAt(e.clientX, e.clientY));
-        return;
-      }
       const id = e.dataTransfer?.getData(MODEL_DRAG_MIME);
       if (!id) return;
       e.preventDefault();
@@ -648,9 +640,11 @@ export class Viewport {
       case 'model-changed':
         // pixel-only edits are already live in the shared atlas texture
         if (e.structural) {
+          // variants and components that hold this one are drawn from its shapes too
+          const ids = new Set([e.id, ...dependentsOf(store.project.models, e.id)]);
           game.models.invalidate(e.id);
           for (const o of store.objects) {
-            if (o.kind === 'model' && o.modelId === e.id) game.level.upsert(o);
+            if (o.kind === 'model' && ids.has(o.modelId)) game.level.upsert(o);
           }
           game.refreshColliders();
         }

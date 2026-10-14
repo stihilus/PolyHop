@@ -76,7 +76,7 @@ function runsOf(objects: { name: string }[]): Run[] {
 export function fillHierarchy(tree: HTMLElement, store: Store, filter = ''): void {
   clear(tree);
   const sel = store.selection;
-  const row = (icon: string, label: string, selected: boolean, onclick: (e: MouseEvent) => void, id?: string, extra = '') =>
+  const row = (icon: string, label: string, selected: boolean, onclick: (e: MouseEvent) => void, id?: string, extra = '', iconClass = '') =>
     el(
       'button',
       {
@@ -85,14 +85,19 @@ export function fillHierarchy(tree: HTMLElement, store: Store, filter = ''): voi
         'data-object-id': id,
         title: id ? 'Double-click or F2 to rename · Shift / Ctrl+click selects several' : undefined,
       },
-      el('span', { class: 'tree-icon', text: icon }),
+      el('span', { class: `tree-icon${iconClass}`, text: icon }),
       el('span', { class: 'tree-label', text: label }),
     );
   tree.append(row('◉', 'Player', sel.kind === 'player', () => store.select({ kind: 'player' })));
-  const icon = (o: { rules: unknown[]; kind: string }) => (o.rules.length > 0 ? '★' : o.kind === 'model' ? '◆' : '▣');
+  // ordinary objects are yellow (★ when they do something); a component's master is a filled purple diamond and its
+  // instances hollow ones
+  const iconOf = (o: (typeof store.objects)[number]): { text: string; cls: string } => {
+    if (o.kind === 'model' && store.getModel(o.modelId)?.component) return { text: o.master ? '◆' : '◇', cls: ' icon-component' };
+    return { text: o.rules.length > 0 ? '★' : '▣', cls: '' };
+  };
   const objectRow = (o: (typeof store.objects)[number], extra = '') =>
     row(
-      icon(o),
+      iconOf(o).text,
       o.name,
       store.isSelected(o.id),
       (e) => {
@@ -101,6 +106,7 @@ export function fillHierarchy(tree: HTMLElement, store: Store, filter = ''): voi
       },
       o.id,
       extra,
+      iconOf(o).cls,
     );
 
   const objects = store.objects;

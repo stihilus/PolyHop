@@ -2,24 +2,21 @@ import * as THREE from 'three';
 import { type FaceTile, type MeshData, faceNormal, meshBounds, planarAxes, triangulateFace } from '../core/mesh';
 import { SMOOTH_ANGLE, faceCornerNormals } from '../core/meshModify';
 import { isBoxMesh, worldPoints } from '../core/shape';
-import type { LevelBlock, LevelModelInstance, LevelObject, Model } from '../core/types';
+import { isTiled, modelLook } from '../core/components';
+import type { LevelBlock, LevelModelInstance, LevelObject, Model, Vec3 } from '../core/types';
 import type { Action } from '../core/logic';
 import { sampleClip } from '../core/rig';
 import { type Colliders, type MeshCollider, chunkedColliders, isAxisAlignedRotation } from './collision';
-import { type ModelLibrary, type ModelRender, modelInstanceColliders, modelInstanceMeshes } from './modelRender';
+import { type ModelLibrary, type ModelRender, modelInstanceBounds, modelInstanceColliders, modelInstanceMeshes } from './modelRender';
+import { type UvRect, tileUvRect, tiledMaterial } from './tileMaterial';
+
+export type { UvRect };
 import { type Box, boxFromPoints } from './physics';
 import { RigRender } from './rigRender';
 import type { TextureLibrary } from './textures';
 
 /** How many meters one texture tile covers on a block face. */
 export const TILE_WORLD_SIZE = 1;
-
-export interface UvRect {
-  u0: number;
-  v0: number; // bottom
-  u1: number;
-  v1: number; // top
-}
 
 /** A run of triangles that share one material: the block's own tile (`tile` null) or a painted face tile. */
 export interface BlockGroup {
@@ -117,60 +114,6 @@ export function buildBlockGeometryData(mesh: MeshData, smooth = false): BlockGeo
   };
 }
 
-function tileUvRect(col: number, row: number, tileSize: number, texW: number, texH: number): UvRect {
-  const inset = 0.01; // texel fraction, avoids bleeding from neighbouring tiles
-  return {
-    u0: (col * tileSize + inset) / texW,
-    u1: ((col + 1) * tileSize - inset) / texW,
-    v0: 1 - ((row + 1) * tileSize - inset) / texH,
-    v1: 1 - (row * tileSize + inset) / texH,
-  };
-}
-
-/**
- * A Lambert material that repeats one rectangle of an atlas over every face: the fragment shader wraps
- * the per-vertex tile coordinates with fract() into the tile's sub-rectangle. Nearest filtering and no
- * mipmaps (see TextureLibrary) make the wrap seamless.
- */
-function tiledMaterial(
-  map: THREE.Texture,
-  rect: UvRect,
-  color: THREE.Color,
-  side: THREE.Side,
-  opacity = 1,
-  scroll?: THREE.Vector2,
-): THREE.MeshLambertMaterial {
-  // alphaTest: pixels that are more than half transparent are cut out (grass, leaves, fences)
-  const mat = new THREE.MeshLambertMaterial({ map, color, alphaTest: 0.5, side });
-  if (opacity < 1) {
-    // see-through: water, glass. Drawn after the solid things and not written to the depth buffer
-    mat.transparent = true;
-    mat.opacity = opacity;
-    mat.depthWrite = false;
-  }
-  const tile = new THREE.Vector4(rect.u0, rect.v0, rect.u1 - rect.u0, rect.v1 - rect.v0);
-  const offset = scroll ?? new THREE.Vector2(0, 0);
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uTile = { value: tile };
-    shader.uniforms.uScroll = { value: offset };
-    shader.vertexShader =
-      'attribute vec2 aTileUv;\nvarying vec2 vTileUv;\n' +
-      shader.vertexShader.replace('#include <uv_vertex>', '#include <uv_vertex>\n  vTileUv = aTileUv;');
-    shader.fragmentShader =
-      'uniform vec4 uTile;\nuniform vec2 uScroll;\nvarying vec2 vTileUv;\n' +
-      shader.fragmentShader.replace(
-        '#include <map_fragment>',
-        `#ifdef USE_MAP
-          vec2 tileCoord = uTile.xy + fract(vTileUv + uScroll) * uTile.zw;
-          vec4 sampledDiffuseColor = texture2D( map, tileCoord );
-          diffuseColor *= sampledDiffuseColor;
-        #endif`,
-      );
-  };
-  mat.customProgramCacheKey = () => 'polyhop-tiled-lambert';
-  return mat;
-}
-
 const DEG = Math.PI / 180;
 
 /** A small stable number from an id, used to desynchronise animated instances. */
@@ -178,6 +121,45 @@ function hashId(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) >>> 0;
   return h;
+}
+
+/** Two '#rrggbb' colors multiplied channel by channel (an instance's tint on top of the look of its model). */
+export function multiplyColors(a: string, b: string | undefined): string {
+  if (!b || b.toLowerCase() === '#ffffff') return a;
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const out = [0, 1, 2].map((i) => Math.round((channel(a, i) * channel(b, i)) / 255));
+  return `#${out.map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * An instance of a tile-mapped model drawn as a block: all its shapes merged into one mesh in model space, with the
+ * scale of the instance applied to the points (so the tile keeps its size when the instance is made bigger).
+ */
+export function instanceAsBlock(o: LevelModelInstance, model: Model): LevelBlock {
+  const look = modelLook(model);
+  const verts: Vec3[] = [];
+  const faces: MeshData['faces'] = [];
+  for (const cube of model.cubes) {
+    const base = verts.length;
+    for (const p of worldPoints(cube)) verts.push([p[0] * o.scale[0], p[1] * o.scale[1], p[2] * o.scale[2]]);
+    for (const f of cube.mesh.faces) faces.push({ ...f, v: f.v.map((i) => i + base) });
+  }
+  return {
+    id: o.id,
+    name: o.name,
+    kind: 'block',
+    position: o.position,
+    rotation: o.rotation,
+    mesh: { verts, faces },
+    tile: look.tile && model.texture ? { texture: model.texture, col: look.tile.col, row: look.tile.row } : null,
+    color: multiplyColors(look.tint, o.tint),
+    doubleSided: look.doubleSided,
+    ...(model.cubes.some((c) => c.smooth) ? { smooth: true } : {}),
+    ...(look.opacity !== undefined ? { opacity: look.opacity } : {}),
+    ...(look.liquid ? { liquid: true } : {}),
+    collide: o.collide,
+    rules: o.rules,
+  };
 }
 
 /** The Three.js representation of a level: blocks (tiled meshes) and placed model instances. */
@@ -206,6 +188,8 @@ export class Level {
   private meshes = new Map<string, THREE.Mesh>();
   /** Merged blocks and instanced models of a running game (not individually addressable). */
   private batches: THREE.Object3D[] = [];
+  /** Copies of model materials made for tinted instances of a running game. */
+  private tinted: THREE.Material[] = [];
   /** Offsets of the flowing materials (water), moved a little every frame. */
   private flows: THREE.Vector2[] = [];
   /** Material of the still mesh that stands in for an animated model (picking and bounds only). */
@@ -242,11 +226,22 @@ export class Level {
 
   private canBatch(o: LevelObject): boolean {
     if (o.kind === 'block') return !o.liquid && !o.terrain;
-    // a model that plays an animation, or one that is missing, stays on its own
-    return !o.animation && this.models.get(o.modelId) !== null;
+    // a model that plays an animation, or one that is missing, stays on its own (so does a body of water)
+    const render = this.models.get(o.modelId);
+    return !o.animation && render !== null && !(isTiled(render.model) && modelLook(render.model).liquid);
+  }
+
+  /** The material of a model drawn in another color: a copy of its own (kept to be disposed with the level). */
+  private tintedMaterial(render: ModelRender, tint: string): THREE.Material {
+    const m = render.material.clone();
+    m.color.set(multiplyColors(`#${render.material.color.getHexString()}`, tint));
+    this.tinted.push(m);
+    return m;
   }
 
   private clearBatches(): void {
+    for (const m of this.tinted) m.dispose();
+    this.tinted = [];
     for (const b of this.batches) {
       this.group.remove(b);
       const mesh = b as THREE.Mesh;
@@ -273,20 +268,26 @@ export class Level {
       cast: boolean;
     }
     const buckets = new Map<string, Bucket>();
-    const instances = new Map<string, { render: ModelRender; matrices: THREE.Matrix4[] }>();
+    const instances = new Map<string, { render: ModelRender; matrices: THREE.Matrix4[]; tint?: string }>();
     const m4 = new THREE.Matrix4();
     const rotation = new THREE.Matrix3();
     const v = new THREE.Vector3();
     const q = new THREE.Quaternion();
     const cell = (x: number, z: number) => `${Math.floor(x / BATCH_CELL)}:${Math.floor(z / BATCH_CELL)}`;
 
-    for (const o of objects) {
+    for (const source of objects) {
+      // an instance of a tile-mapped model is drawn like a block
+      let o: LevelObject = source;
+      if (source.kind === 'model') {
+        const render = this.models.get(source.modelId);
+        if (render && isTiled(render.model)) o = instanceAsBlock(source, render.model);
+      }
       if (o.kind === 'model') {
         const render = this.models.get(o.modelId);
         if (!render) continue;
-        const key = `${o.modelId}|${cell(o.position[0], o.position[2])}`;
+        const key = `${o.modelId}|${o.tint ?? ''}|${cell(o.position[0], o.position[2])}`;
         let entry = instances.get(key);
-        if (!entry) instances.set(key, (entry = { render, matrices: [] }));
+        if (!entry) instances.set(key, (entry = { render, matrices: [], tint: o.tint }));
         m4.compose(
           v.set(o.position[0], o.position[1], o.position[2]),
           q.setFromEuler(new THREE.Euler(o.rotation[0] * DEG, o.rotation[1] * DEG, o.rotation[2] * DEG, 'XYZ')),
@@ -379,8 +380,9 @@ export class Level {
       this.batches.push(mesh);
     }
 
-    for (const { render, matrices } of instances.values()) {
-      const inst = new THREE.InstancedMesh(render.geometry, render.material, matrices.length);
+    for (const { render, matrices, tint } of instances.values()) {
+      const material = tint ? this.tintedMaterial(render, tint) : render.material;
+      const inst = new THREE.InstancedMesh(render.geometry, material, matrices.length);
       matrices.forEach((m, i) => inst.setMatrixAt(i, m));
       inst.instanceMatrix.needsUpdate = true;
       inst.castShadow = true;
@@ -395,7 +397,17 @@ export class Level {
 
   upsert(obj: LevelObject): void {
     this.remove(obj.id);
-    const mesh = obj.kind === 'block' ? this.buildBlock(obj) : this.buildModel(obj);
+    let mesh: THREE.Mesh;
+    const render = obj.kind === 'model' ? this.models.get(obj.modelId) : null;
+    if (obj.kind === 'block') {
+      mesh = this.buildBlock(obj);
+    } else if (render && isTiled(render.model)) {
+      // a tile-mapped model is drawn like a block, with the scale of the instance in its points
+      mesh = this.buildBlock(instanceAsBlock(obj, render.model));
+      mesh.userData.bakedScale = obj.scale.join(',');
+    } else {
+      mesh = this.buildModel(obj);
+    }
     mesh.name = obj.name;
     mesh.userData.objectId = obj.id;
     this.meshes.set(obj.id, mesh);
@@ -409,7 +421,10 @@ export class Level {
     if (!mesh) return;
     mesh.position.set(obj.position[0], obj.position[1], obj.position[2]);
     mesh.rotation.set(obj.rotation[0] * DEG, obj.rotation[1] * DEG, obj.rotation[2] * DEG, 'XYZ');
-    if (obj.kind === 'model') mesh.scale.set(obj.scale[0], obj.scale[1], obj.scale[2]);
+    if (obj.kind !== 'model') return;
+    const baked = mesh.userData.bakedScale as string | undefined;
+    if (baked === undefined) mesh.scale.set(obj.scale[0], obj.scale[1], obj.scale[2]);
+    else if (baked !== obj.scale.join(',')) this.upsert(obj); // the points carry the scale: draw it again
   }
 
   private buildBlock(obj: LevelBlock): THREE.Mesh {
@@ -465,6 +480,11 @@ export class Level {
     const render = this.models.get(obj.modelId);
     if (render) {
       const mesh = render.createMesh();
+      if (obj.tint) {
+        const own = this.tintedMaterial(render, obj.tint);
+        mesh.material = own;
+        mesh.userData.ownMaterial = own;
+      }
       // an animated instance: the still mesh stays as an invisible stand-in for picking, and the
       // posed rig is its child, so it moves, turns and scales with the instance
       if (obj.animation && render.model.bones.length > 0 && render.model.clips.some((c) => c.name === obj.animation)) {
@@ -494,6 +514,7 @@ export class Level {
     if (!mesh) return;
     this.group.remove(mesh);
     (mesh.userData.rig as RigRender | undefined)?.dispose();
+    (mesh.userData.ownMaterial as THREE.Material | undefined)?.dispose();
     if (!mesh.userData.sharedResources) {
       mesh.geometry.dispose();
       const mat = mesh.material as THREE.Material | THREE.Material[];
@@ -538,6 +559,14 @@ export function buildColliders(objects: LevelObject[], getModel: (id: string) =>
   const liquids: Box[] = [];
   for (const o of objects) {
     if (o.kind === 'block' && o.liquid) liquids.push(boxFromPoints(worldPoints(o)));
+    if (o.kind === 'model') {
+      // a body of water that is a component
+      const m = getModel(o.modelId);
+      if (m && isTiled(m) && modelLook(m).liquid) {
+        const b = modelInstanceBounds(m, o);
+        if (b) liquids.push(b);
+      }
+    }
     if (!o.collide) continue;
     if (o.kind === 'block') {
       const pts = worldPoints(o);

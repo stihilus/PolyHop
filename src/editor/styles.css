@@ -16,6 +16,9 @@
   --muted: #8a93a3;
   --accent: #ffb23e;
   --accent-dim: #8a5f1f;
+  /* components (masters and their instances) are purple, ordinary objects are yellow */
+  --component: #a98bff;
+  --component-dim: #5b4a99;
   --danger: #e5604f;
   --radius: 5px;
   color-scheme: dark;
@@ -2189,4 +2192,206 @@ input[type='search']:focus {
   color: #ffb08a;
   background: rgb(255 120 60 / 0.08);
   border-radius: 3px;
+}
+
+/* ================================================================ components and the Assets dock */
+.level-stack {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.level-stack > .workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.dock-splitter {
+  flex: none;
+  height: 6px;
+  cursor: row-resize;
+  background: var(--border);
+  transition: background 0.1s;
+}
+.dock-splitter:hover,
+.dock-splitter.dragging {
+  background: var(--accent-dim);
+}
+.assets-dock {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  height: var(--dock-h, 196px);
+  min-height: 0;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+.level-stack.dock-folded .assets-dock {
+  height: auto;
+}
+.level-stack.dock-folded .assets-dock .asset-grid,
+.level-stack.dock-folded .dock-splitter {
+  display: none;
+}
+.is-playing .assets-dock {
+  opacity: 0.55;
+}
+.assets-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.level-stack.dock-folded .assets-head {
+  border-bottom: 0;
+}
+.assets-title {
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  user-select: none;
+}
+.dock-toggle {
+  font: inherit;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.dock-toggle:hover {
+  color: var(--text);
+}
+.assets-count {
+  font-size: 11px;
+}
+.assets-search {
+  flex: 0 1 180px;
+  min-width: 90px;
+}
+.chip {
+  font: inherit;
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.chip:hover {
+  color: var(--text);
+}
+.chip.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: #2d2616;
+}
+.chip[data-kind='components'].active {
+  color: var(--component);
+  border-color: var(--component-dim);
+  background: rgb(169 139 255 / 0.12);
+}
+.assets-dock .asset-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  align-content: start;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.assets-dock .asset-card {
+  position: relative;
+  padding-top: 8px;
+}
+.assets-dock .asset-card img,
+.assets-dock .asset-empty {
+  width: 64px;
+  height: 64px;
+}
+.asset-mark {
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  font-size: 12px;
+  line-height: 1;
+}
+.asset-object .asset-mark {
+  color: var(--accent);
+}
+.asset-component .asset-mark {
+  color: var(--component);
+}
+.asset-component {
+  border-color: var(--component-dim);
+}
+.asset-component:hover {
+  border-color: var(--component);
+}
+.asset-component.selected {
+  border-color: var(--component);
+  background: rgb(169 139 255 / 0.14);
+}
+.asset-count {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.tree-icon.icon-component {
+  color: var(--component);
+}
+.component-badge {
+  display: flex;
+  gap: 8px;
+  margin: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.component-badge .component-mark {
+  flex: none;
+  font-size: 13px;
+}
+.component-master,
+.component-instance {
+  border-color: var(--component-dim);
+  background: rgb(169 139 255 / 0.1);
+}
+.component-master .component-mark,
+.component-instance .component-mark {
+  color: var(--component);
+}
+.component-object {
+  border-color: var(--accent-dim);
+  background: #2d2616;
+}
+.component-object .component-mark {
+  color: var(--accent);
+}
+.btn.component-btn {
+  color: var(--component);
+  border-color: var(--component-dim);
+}
+.btn.component-btn:hover:not(:disabled) {
+  border-color: var(--component);
+  background: rgb(169 139 255 / 0.14);
+}
+.model-look .form-row {
+  margin-bottom: 4px;
+}
+.part-card {
+  margin: 6px;
+  padding: 8px;
+  border: 1px solid var(--component-dim);
+  border-radius: var(--radius);
+  background: rgb(169 139 255 / 0.06);
 }

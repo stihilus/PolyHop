@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { boxMesh } from '../src/core/mesh';
 import { DEFAULT_LOOK, normalizeLook, sunDirection } from '../src/core/look';
-import { builtInPrefab } from '../src/core/prefabs';
+import { builtInComponent, isTiled, modelDefaults, modelLook } from '../src/core/components';
 import { RENDER_SCALES, createBlock, createDefaultProject, defaultPlayer, normalizeObject, normalizeProject } from '../src/core/types';
 import { Store } from '../src/editor/store';
 import { buildColliders } from '../src/runtime/level';
@@ -76,10 +76,11 @@ describe('see-through blocks and water', () => {
   });
 
   it('the Water asset is a see-through, non-solid body of water', () => {
-    const w = builtInPrefab('water', () => 'x').object;
-    expect(w.kind === 'block' && w.liquid).toBe(true);
-    expect(w.kind === 'block' && w.opacity).toBeLessThan(1);
-    expect(w.collide).toBe(false);
+    const w = builtInComponent('water', () => 'x');
+    expect(isTiled(w)).toBe(true);
+    expect(modelLook(w).liquid).toBe(true);
+    expect(modelLook(w).opacity).toBeLessThan(1);
+    expect(modelDefaults(w).collide).toBe(false);
   });
 
   it('a liquid block is a swim volume even though it is not solid', () => {

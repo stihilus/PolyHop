@@ -1,12 +1,14 @@
-// The right-hand panel for objects: one or several selected, a block, a model, and game object assets.
+// The right-hand panel for objects: one or several selected, a block, an instance of a component, and a component
+// (an asset) selected in the Assets.
 
 import * as THREE from 'three';
-import { changePrefabLook, placedFrom } from '../../core/prefabs';
+import { instancesOf, isComponent, isOverridden, modelDefaults, modelLook, modelSize } from '../../core/components';
 import { recenterMesh, meshSize, scaleMeshToSize } from '../../core/mesh';
 import { quaternionFromDegrees } from '../../core/shape';
-import { type LevelBlock, type LevelModelInstance, type LevelObject, type Prefab, type Vec3, newId } from '../../core/types';
+import { type LevelBlock, type LevelModelInstance, type LevelObject, type Model, type Vec3 } from '../../core/types';
 import { clear, el } from '../ui/dom';
 import { type Field, buildForm } from '../ui/form';
+import { buildModelLookEditor, componentBadge } from '../ui/modelLook';
 import { buildTilePicker } from '../ui/tilePicker';
 import { BLOCK_FIELDS } from './fields';
 import type { PanelHost } from './host';
@@ -62,8 +64,8 @@ export function buildMultiInspector(host: PanelHost): void {
   );
 }
 
-/** `asset`: the block is the template of a game object asset (no position or name of its own). */
-export function buildBlockInspector(host: PanelHost, obj: LevelBlock, asset = false): void {
+/** A block: an ordinary object of the level (yellow), edited here with every tool. */
+export function buildBlockInspector(host: PanelHost, obj: LevelBlock): void {
   // "Size" is derived from the mesh; editing it scales the vertices
   const view = {
     name: obj.name,
@@ -77,8 +79,7 @@ export function buildBlockInspector(host: PanelHost, obj: LevelBlock, asset = fa
     liquid: obj.liquid === true,
     collide: obj.collide,
   };
-  const fields = asset ? BLOCK_FIELDS.filter((f) => !('key' in f) || (f.key !== 'position' && f.key !== 'name')) : BLOCK_FIELDS;
-  const form = buildForm(fields, view as unknown as Record<string, unknown>, (key) => {
+  const form = buildForm(BLOCK_FIELDS, view as unknown as Record<string, unknown>, (key) => {
     if (key === 'size') scaleMeshToSize(obj.mesh, [Math.max(0.0625, view.size[0]), Math.max(0.0625, view.size[1]), Math.max(0.0625, view.size[2])]);
     else if (key === 'name') obj.name = view.name;
     else if (key === 'color') obj.color = view.color;
@@ -98,7 +99,7 @@ export function buildBlockInspector(host: PanelHost, obj: LevelBlock, asset = fa
     host.touch(obj);
   });
   host.inspector.append(
-    ...(asset ? [] : [el('div', { class: 'section-title', text: `Block · ${obj.name}` })]),
+    el('div', { class: 'section-title', text: `Object · ${obj.name}` }),
     form,
     ...(obj.terrain
       ? [el('div', { class: 'empty muted', text: 'A terrain: Size stretches it. To add more ground and keep what you sculpted, use the Sculpt tool (G) > Size.' })]
@@ -123,214 +124,387 @@ export function buildBlockInspector(host: PanelHost, obj: LevelBlock, asset = fa
   );
   host.inspector.append(buildTileEditor(host, obj));
   host.inspector.append(host.behaviorEditor(obj, (kind) => host.applyPreset(obj, kind)));
-  if (!asset) host.inspector.append(buildAssetLink(host, obj));
+  host.inspector.append(buildMakeComponent(host, obj));
 }
 
-export function buildModelInstanceInspector(host: PanelHost, obj: LevelModelInstance, asset = false): void {
-  const allFields: Field[] = [
-    { kind: 'text', key: 'name', label: 'Name' },
-    {
-      kind: 'select',
-      key: 'modelId',
-      label: 'Model',
-      options: host.store.project.models.map((m) => ({ value: m.id, label: m.name })),
-    },
-    { kind: 'vec3', key: 'position', label: 'Position', step: 0.5, unit: 'm' },
-    { kind: 'vec3', key: 'rotation', label: 'Rotation', step: 15, unit: '°' },
-    { kind: 'vec3', key: 'scale', label: 'Scale', step: 0.1 },
-    {
-      kind: 'select',
-      key: 'animation',
-      label: 'Animation',
-      nullable: true,
-      noneLabel: 'None (still)',
-      options: (host.store.getModel(obj.modelId)?.clips ?? []).map((c) => ({ value: c.name, label: c.name })),
-      hint: 'Plays this animation of the model, looping. Make animations in the Animate tab. The collision box does not move.',
-    },
-    { kind: 'number', key: 'animationSpeed', label: 'Anim speed', min: 0.1, max: 8, step: 0.1, unit: '×' },
-    { kind: 'bool', key: 'collide', label: 'Solid', hint: 'Each cube of the model becomes a collision box' },
-  ];
-  // an asset has no place or name of its own, and its model is chosen at the top ("Looks like")
-  const fields = asset ? allFields.filter((f) => !('key' in f) || (f.key !== 'position' && f.key !== 'name' && f.key !== 'modelId')) : allFields;
-  host.inspector.append(
-    ...(asset ? [] : [el('div', { class: 'section-title', text: `Model · ${obj.name}` })]),
-    buildForm(fields, obj as unknown as Record<string, unknown>, (key) => {
-      if (key === 'modelId') {
-        obj.animation = null; // the other model has other animations
-        host.touch(obj);
-        host.refreshInspector();
-        return;
-      }
-      host.touch(obj);
+/** "Component" section of an ordinary object: make it a component (a master) to place linked copies of it. */
+export function buildMakeComponent(host: PanelHost, obj: LevelObject): HTMLElement {
+  const root = el('div', { class: 'component-link' });
+  root.append(el('div', { class: 'form-section', text: 'Component' }));
+  const isTerrain = obj.kind === 'block' && !!obj.terrain;
+  root.append(
+    el('div', {
+      class: 'empty muted',
+      text: isTerrain
+        ? 'A sculpted terrain belongs to its place and cannot be a component.'
+        : 'An ordinary object. Make it a component to keep it in the Assets and place more of it: they all follow every change you make to it.',
     }),
     el(
       'div',
-      { class: 'button-stack' },
+      { class: 'button-stack row' },
       el('button', {
-        class: 'btn',
-        text: 'Edit model',
-        onclick: () => host.openModel(obj.modelId),
+        class: 'btn component-btn',
+        text: 'Make component',
+        disabled: isTerrain,
+        title: 'It stays here as the master (purple); the component is in the Assets',
+        onclick: () => host.makeComponent(obj.id),
       }),
     ),
-    host.behaviorEditor(obj, (kind) => host.applyPreset(obj, kind)),
-    ...(asset ? [] : [buildAssetLink(host, obj)]),
   );
-}
-
-/** "Game object asset" section of a placed object: update it from its asset, or make an asset of it. */
-export function buildAssetLink(host: PanelHost, obj: LevelObject): HTMLElement {
-  const root = el('div', { class: 'asset-link' });
-  root.append(el('div', { class: 'form-section', text: 'Game object asset' }));
-  const prefab = obj.prefab ? host.store.getPrefab(obj.prefab) : undefined;
-  const buttons = el('div', { class: 'button-stack row' });
-  if (prefab) {
-    root.append(
-      el('div', {
-        class: 'empty muted',
-        text: `Placed from “${prefab.name}”. The asset can be edited in Assets; its changes reach this object when you update it.`,
-      }),
-    );
-    buttons.append(
-      el('button', {
-        class: 'btn',
-        text: 'Update from asset',
-        title: 'Take the behavior and look (rules, solid, texture, tint, model, animation) from the asset. Position, turn, size and name stay.',
-        onclick: () => {
-          host.store.updateFromPrefab(obj.id);
-          host.refreshInspector();
-        },
-      }),
-      el('button', {
-        class: 'btn',
-        text: 'Save to asset',
-        title: 'The asset takes over everything of this object, including its shape and size. Objects placed later start like host.',
-        onclick: () => {
-          host.store.saveToPrefab(obj.id);
-          host.refreshAssets();
-        },
-      }),
-    );
-  } else {
-    root.append(el('div', { class: 'empty muted', text: 'Not made from an asset. Keep it as one to place more of it.' }));
-  }
-  buttons.append(
-    el('button', {
-      class: 'btn',
-      text: 'Make an asset',
-      title: 'Keep this object (shape, look and behavior) in Assets > Game objects as a new asset',
-      onclick: () => {
-        const id = host.store.makePrefab(obj.id);
-        if (id) {
-          host.setLeftTab('assets');
-          host.selectAsset({ prefab: id });
-        }
-      },
-    }),
-  );
-  root.append(buttons);
   return root;
 }
 
-/** "Looks like": what the asset is made of, a plain block or one of the models. */
-export function buildLooksLike(host: PanelHost, prefab: Prefab): HTMLElement {
-  const select = el('select', { title: 'What this game object looks like: a plain block, or one of your models' });
-  select.append(el('option', { value: 'block', text: 'Plain block' }));
-  const group = el('optgroup', { label: 'Model' });
-  for (const m of host.store.project.models) group.append(el('option', { value: m.id, text: m.name }));
-  if (group.childElementCount > 0) select.append(group);
-  const o = prefab.object;
-  const current = o.kind === 'block' ? 'block' : o.modelId;
-  if (o.kind === 'model' && !host.store.getModel(o.modelId)) select.append(el('option', { value: o.modelId, text: `${o.modelId} (missing)` }));
-  select.value = current;
-  select.addEventListener('change', () => {
-    if (select.value === 'block') {
-      const tile = host.textures.atlasWithTile(7, 0) ?? host.textures.names()[0];
-      changePrefabLook(prefab, { kind: 'block', tile: tile ? { texture: tile, col: 7, row: 0 } : null }, newId);
-    } else {
-      changePrefabLook(prefab, { kind: 'model', modelId: select.value }, newId);
-    }
-    host.store.prefabChanged(prefab.id);
-    host.refreshAssets();
-    host.refreshInspector();
-  });
-  return el(
-    'label',
-    { class: 'form-row' },
-    el('span', { class: 'form-label', text: 'Looks like' }),
-    el('span', { class: 'form-control' }, select),
+/** A model placed in the level: an instance of a component, its master placement, or an ordinary object of shapes. */
+export function buildModelInstanceInspector(host: PanelHost, obj: LevelModelInstance): void {
+  const { store } = host;
+  const model = store.getModel(obj.modelId);
+  const comp = isComponent(model);
+  const master = comp && obj.master === true;
+  const defaults = model ? modelDefaults(model) : null;
+  const size = model ? modelSize(model) : ([1, 1, 1] as Vec3);
+  const tinted = model ? modelLook(model).tint : '#ffffff';
+
+  // what an instance sets itself is marked; the master edits the component
+  const own = (key: 'rules' | 'collide' | 'animation') => comp && !master && isOverridden(obj, key);
+  const followsLabel = (label: string, key: 'rules' | 'collide' | 'animation') => (own(key) ? `${label} (set here)` : label);
+
+  const view = {
+    name: obj.name,
+    position: obj.position,
+    rotation: obj.rotation,
+    scale: obj.scale,
+    size: [size[0] * obj.scale[0], size[1] * obj.scale[1], size[2] * obj.scale[2]] as Vec3,
+    tint: obj.tint ?? tinted,
+    animation: obj.animation,
+    animationSpeed: obj.animationSpeed,
+    collide: obj.collide,
+  };
+  const fields: Field[] = [
+    { kind: 'text', key: 'name', label: 'Name' },
+    { kind: 'vec3', key: 'position', label: 'Position', step: 0.5, unit: 'm' },
+    { kind: 'vec3', key: 'rotation', label: 'Rotation', step: 15, unit: '°' },
+    { kind: 'vec3', key: 'scale', label: 'Scale', step: 0.1 },
+    ...(model && model.cubes.length > 0
+      ? [
+          {
+            kind: 'vec3',
+            key: 'size',
+            label: 'Size',
+            step: 0.5,
+            unit: 'm',
+            hint: master ? 'The size of the component: every instance follows.' : 'The size in meters: it sets the scale of this placement.',
+          } as Field,
+        ]
+      : []),
+    { kind: 'color', key: 'tint', label: 'Tint', hint: 'Colors this placement; the component keeps its own look' },
+    {
+      kind: 'select',
+      key: 'animation',
+      label: followsLabel('Animation', 'animation'),
+      nullable: true,
+      noneLabel: 'None (still)',
+      options: (model?.clips ?? []).map((c) => ({ value: c.name, label: c.name })),
+      hint: 'Plays this animation of the model, looping. Make animations in the Animate tab. The collision box does not move.',
+    },
+    { kind: 'number', key: 'animationSpeed', label: 'Anim speed', min: 0.1, max: 8, step: 0.1, unit: '×' },
+    { kind: 'bool', key: 'collide', label: followsLabel('Solid', 'collide'), hint: 'Each shape of the model becomes a collision box' },
+  ];
+
+  const mark = (key: 'rules' | 'collide' | 'animation') => {
+    if (!comp) return;
+    if (master) store.componentChanged(obj.modelId, `edit:${key}`);
+  };
+
+  host.inspector.append(
+    el('div', { class: 'section-title', text: `${comp ? 'Component' : 'Object'} · ${obj.name}` }),
+    comp
+      ? componentBadge(
+          master ? `Master of “${model?.name}”. Its shapes are edited here or in Models; every instance follows it.` : `Instance of “${model?.name}”. It follows the component; its shapes are edited in the master.`,
+          master ? 'master' : 'instance',
+        )
+      : componentBadge('An ordinary object made of shapes of its own.', 'object'),
+    buildForm(fields, view as unknown as Record<string, unknown>, (key) => {
+      switch (key) {
+        case 'name':
+          obj.name = view.name;
+          break;
+        case 'size': {
+          // the master of a one-shape component: its size is the size of the component (every instance follows)
+          if (master && model && model.cubes.length === 1 && obj.scale.every((n) => n === 1)) {
+            store.resizeComponent(model.id, [Math.max(0.0625, view.size[0]), Math.max(0.0625, view.size[1]), Math.max(0.0625, view.size[2])]);
+            host.refreshAssets();
+            host.refreshInspector();
+            return;
+          }
+          // the size of the placement: the scale that makes the component this big
+          const s: Vec3 = [
+            size[0] > 1e-6 ? Math.max(0.01, view.size[0] / size[0]) : 1,
+            size[1] > 1e-6 ? Math.max(0.01, view.size[1] / size[1]) : 1,
+            size[2] > 1e-6 ? Math.max(0.01, view.size[2] / size[2]) : 1,
+          ];
+          obj.scale = s;
+          view.scale = obj.scale;
+          break;
+        }
+        case 'tint':
+          if (view.tint.toLowerCase() === tinted.toLowerCase()) delete obj.tint;
+          else obj.tint = view.tint;
+          break;
+        case 'animation':
+        case 'animationSpeed':
+          obj.animation = view.animation;
+          obj.animationSpeed = view.animationSpeed;
+          if (comp && !master) store.overrideInstance(obj.id, 'animation');
+          else mark('animation');
+          break;
+        case 'collide':
+          obj.collide = view.collide;
+          if (comp && !master) store.overrideInstance(obj.id, 'collide');
+          else mark('collide');
+          break;
+        default:
+          break;
+      }
+      host.touch(obj);
+      if (key === 'size' || key === 'animation' || key === 'collide') host.refreshInspector();
+    }),
   );
+
+  const row = (...children: HTMLElement[]) => el('div', { class: 'button-stack row' }, ...children);
+  if (comp && model) {
+    const level = store.project.levels;
+    const count = instancesOf(level, model.id).length;
+    const master2 = store.masterOf(model.id);
+    host.inspector.append(
+      el('div', { class: 'form-section', text: 'Component' }),
+      el('div', { class: 'empty muted', text: `${count} placement${count === 1 ? '' : 's'} in the game follow “${model.name}”.` }),
+      row(
+        el('button', { class: 'btn component-btn', text: 'Open master in Models', title: 'Edit the shapes of the component', onclick: () => host.openModel(model.id) }),
+        ...(master || !master2 ? [] : [el('button', { class: 'btn', text: 'Select master', onclick: () => host.selectObject(master2.id) })]),
+      ),
+      row(
+        el('button', {
+          class: 'btn',
+          text: 'Detach',
+          title: 'Make this an ordinary object with shapes of its own: it stops following the component',
+          onclick: async () => {
+            const ok = await appConfirm(`Detach this from “${model.name}”? It becomes an object with shapes of its own and no longer follows the component.`, {
+              title: 'Detach instance',
+              confirmLabel: 'Detach',
+            });
+            if (ok) {
+              store.detachInstance(obj.id);
+              host.refreshAssets();
+              host.refreshInspector();
+            }
+          },
+        }),
+        ...(!master && isOverridden(obj)
+          ? [
+              el('button', {
+                class: 'btn',
+                text: 'Reset to component',
+                title: 'Take the behavior (rules, solid, animation) of the component again',
+                onclick: () => {
+                  store.resetInstance(obj.id);
+                  host.refreshInspector();
+                },
+              }),
+            ]
+          : []),
+      ),
+    );
+  } else {
+    host.inspector.append(
+      el('div', { class: 'button-stack' }, el('button', { class: 'btn', text: 'Edit model', onclick: () => host.openModel(obj.modelId) })),
+    );
+  }
+
+  host.inspector.append(host.behaviorEditor(obj, (kind) => host.applyPreset(obj, kind)));
+  if (!comp) host.inspector.append(buildMakeComponent(host, obj));
+  if (comp && !master && defaults && own('rules')) {
+    host.inspector.append(
+      el('div', { class: 'empty muted', text: 'The rules of this placement are set here, not by the component.' }),
+      el(
+        'div',
+        { class: 'button-stack' },
+        el('button', {
+          class: 'btn',
+          text: 'Use the rules of the component',
+          onclick: () => {
+            store.resetInstance(obj.id, 'rules');
+            host.refreshInspector();
+          },
+        }),
+      ),
+    );
+  }
 }
 
-/** The properties of a game object asset: look, behavior, and what to do with the objects placed from it. */
-export function buildPrefabInspector(host: PanelHost, prefab: Prefab): void {
-  const placed = host.store.project.levels.reduce((n, l) => n + placedFrom(l.objects, prefab.id).length, 0);
-  host.inspector.append(el('div', { class: 'section-title', text: `Game object · ${prefab.name}` }));
+/**
+ * A model selected in the Assets: its look (mapping, tile, tint), what a placement does by default and what to do
+ * with it. A component's instances follow every change made here.
+ */
+export function buildComponentInspector(host: PanelHost, model: Model): void {
+  const { store } = host;
+  const comp = isComponent(model);
+  const placed = instancesOf(store.project.levels, model.id).length;
+  const defaults = modelDefaults(model);
+  const dependents = store.dependents(model.id);
+  const isVariant = !!model.variantOf;
+  const base = isVariant ? store.getModel(model.variantOf!) : undefined;
+
   host.inspector.append(
-    el('div', {
-      class: 'empty muted',
-      text: prefab.base
-        ? 'One of the built-in game objects. Change it as you like: what you place from now on follows it. “Reset” puts it back as it came.'
-        : 'Your own game object. What you place from now on follows it.',
-    }),
-    buildForm([{ kind: 'text', key: 'name', label: 'Name' }], prefab as unknown as Record<string, unknown>, () => {
-      host.store.prefabChanged(prefab.id);
+    el('div', { class: 'section-title', text: `${comp ? 'Component' : 'Object'} · ${model.name}` }),
+    comp
+      ? componentBadge(
+          isVariant
+            ? `A variant of “${base?.name ?? 'a missing component'}”: its shapes, with a look and a behavior of its own.`
+            : 'A component: place it from here, and every instance follows what you change in it.',
+          'master',
+        )
+      : componentBadge('An ordinary model. Make it a component to place linked instances of it.', 'object'),
+    buildForm([{ kind: 'text', key: 'name', label: 'Name' }], model as unknown as Record<string, unknown>, () => {
+      store.componentChanged(model.id, 'edit:name');
       host.refreshAssets();
     }),
-    buildLooksLike(host, prefab),
   );
-
-  const obj = prefab.object;
-  if (obj.kind === 'block') buildBlockInspector(host, obj, true);
-  else buildModelInstanceInspector(host, obj, true);
 
   const row = (...children: HTMLElement[]) => el('div', { class: 'button-stack row' }, ...children);
   host.inspector.append(
-    el('div', { class: 'form-section', text: 'Asset' }),
     row(
-      el('button', { class: 'btn primary', text: 'Place in level', onclick: () => host.placePrefab(prefab.id, host.viewport.viewCenterPoint()) }),
-      el('button', {
-        class: 'btn',
-        text: placed > 0 ? `Update ${placed} placed` : 'Update placed',
-        disabled: placed === 0,
-        title: 'Bring every object already placed from this asset (in all levels) in line with it: behavior, solid, texture, tint, model and animation. Their position, turn, size and name stay.',
-        onclick: () => {
-          host.store.updatePlacedCopies(prefab.id);
-          host.refreshInspector();
-        },
-      }),
+      el('button', { class: 'btn primary', text: 'Place in level', onclick: () => host.placeModel(model.id, host.viewport.viewCenterPoint()) }),
+      el('button', { class: 'btn component-btn', text: 'Edit in Models', onclick: () => host.openModel(model.id) }),
     ),
+  );
+
+  if (comp) {
+    const body = el('div', {});
+    const render = () => {
+      clear(body);
+      body.append(
+        buildModelLookEditor({
+          model,
+          textures: host.textures,
+          onChange: (what) => {
+            store.componentLookChanged(model.id);
+            host.refreshAssets();
+            if (what === 'mapping') host.refreshInspector();
+          },
+          rerender: () => host.refreshInspector(),
+        }),
+      );
+    };
+    render();
+    host.inspector.append(el('div', { class: 'form-section', text: 'Look' }), body);
+
+    // what a placement does until it says otherwise
+    const view = { collide: defaults.collide, animation: defaults.animation, animationSpeed: defaults.animationSpeed };
+    const ensureDefaults = () => {
+      model.defaults = { ...defaults, rules: model.defaults?.rules ?? defaults.rules, ...view };
+    };
+    host.inspector.append(
+      el('div', { class: 'form-section', text: 'Placements start like this' }),
+      buildForm(
+        [
+          { kind: 'bool', key: 'collide', label: 'Solid' },
+          {
+            kind: 'select',
+            key: 'animation',
+            label: 'Animation',
+            nullable: true,
+            noneLabel: 'None (still)',
+            options: model.clips.map((c) => ({ value: c.name, label: c.name })),
+          },
+          { kind: 'number', key: 'animationSpeed', label: 'Anim speed', min: 0.1, max: 8, step: 0.1, unit: '×' },
+        ],
+        view as unknown as Record<string, unknown>,
+        () => {
+          ensureDefaults();
+          store.componentChanged(model.id, 'edit:defaults');
+        },
+      ),
+      host.componentBehaviorEditor(model),
+    );
+  } else {
+    host.inspector.append(
+      el('div', { class: 'button-stack' }, el('button', { class: 'btn component-btn', text: 'Make component', onclick: () => host.setComponent(model.id, true) })),
+    );
+  }
+
+  const info: string[] = [];
+  info.push(`${placed} placement${placed === 1 ? '' : 's'} in the game`);
+  if (dependents.length > 0) info.push(`${dependents.length} variant${dependents.length === 1 ? '' : 's'} / holders made from it`);
+  host.inspector.append(
+    el('div', { class: 'form-section', text: 'Asset' }),
+    el('div', { class: 'empty muted', text: info.join(' · ') }),
     row(
+      ...(comp
+        ? [
+            el('button', {
+              class: 'btn',
+              text: 'Make variant',
+              title: 'A new component with the same shapes, and a look and a behavior of its own',
+              onclick: () => {
+                const id = store.addVariant(model.id);
+                if (id) host.selectAsset(id);
+              },
+            }),
+          ]
+        : []),
       el('button', {
         class: 'btn',
         text: 'Duplicate',
-        onclick: () => {
-          const id = host.store.duplicatePrefab(prefab.id);
-          if (id) host.selectAsset({ prefab: id });
+        onclick: () => host.duplicateModel(model.id),
+      }),
+    ),
+    row(
+      ...(comp && store.canResetBuiltIn(model.id)
+        ? [
+            el('button', {
+              class: 'btn danger',
+              text: 'Reset',
+              title: 'Put this built-in component back as it came',
+              onclick: async () => {
+                const ok = await appConfirm(`Put “${model.name}” back as it came?`, { title: 'Reset component', confirmLabel: 'Reset', danger: true });
+                if (ok) {
+                  store.resetBuiltIn(model.id);
+                  host.refreshAssets();
+                  host.refreshInspector();
+                }
+              },
+            }),
+          ]
+        : []),
+      el('button', {
+        class: 'btn danger',
+        text: 'Delete',
+        title: 'Delete this model and every placement of it',
+        onclick: async () => {
+          const ok = await appConfirm(
+            placed > 0 ? `Delete “${model.name}”? Its ${placed} placement${placed === 1 ? '' : 's'} in the game will be removed too.` : `Delete “${model.name}”?`,
+            { title: 'Delete model', confirmLabel: 'Delete', danger: true },
+          );
+          if (ok) {
+            store.removeModel(model.id);
+            host.selectAsset(null);
+          }
         },
       }),
-      prefab.base
-        ? el('button', {
-            class: 'btn danger',
-            text: 'Reset',
-            title: 'Put this built-in game object back as it came',
-            onclick: async () => {
-              if (!(await appConfirm(`Put “${prefab.name}” back as it came?`, { title: 'Reset game object', confirmLabel: 'Reset', danger: true }))) return;
-              host.store.resetPrefab(prefab.id);
-              host.refreshInspector();
-            },
-          })
-        : el('button', {
-            class: 'btn danger',
-            text: 'Delete',
-            title: 'Delete this asset (objects already placed stay in the level)',
-            onclick: async () => {
-              if (!(await appConfirm(`Delete the game object “${prefab.name}”? Objects already placed stay.`, { title: 'Delete game object', confirmLabel: 'Delete', danger: true }))) return;
-              host.store.removePrefab(prefab.id);
-              host.selectedPrefabId = null;
-              host.refreshAssets();
-              host.refreshInspector();
-            },
-          }),
+      ...(comp
+        ? [
+            el('button', {
+              class: 'btn',
+              text: 'Not a component',
+              title: 'Back to an ordinary model: its placements stay, but they no longer follow it',
+              onclick: () => {
+                store.setComponent(model.id, false);
+                host.refreshAssets();
+                host.refreshInspector();
+              },
+            }),
+          ]
+        : []),
     ),
   );
 }

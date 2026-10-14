@@ -12,8 +12,13 @@ const project = createDefaultProject();
 const builtIn = project.models;
 
 describe('the built-in models follow the Hytale modeling guide', () => {
-  it('there are the two humanoids, the five pickups, the Slime and the Villager', () => {
-    expect(project.models.map((m) => m.id)).toEqual(['humanoid', 'humanoid-female', ...Object.values(ITEM_MODEL_IDS), 'prop-slime', 'prop-villager']);
+  it('there are the two humanoids and the 13 game objects (pickups, Slime, Villager, door, water ...)', () => {
+    const ids = project.models.map((m) => m.id);
+    expect(ids.slice(0, 2)).toEqual(['humanoid', 'humanoid-female']);
+    expect(ids).toHaveLength(15);
+    for (const id of [...Object.values(ITEM_MODEL_IDS), 'prop-slime', 'prop-villager', 'obj-door', 'obj-hazard', 'obj-exit', 'obj-platform', 'obj-sign', 'obj-water']) {
+      expect(ids, id).toContain(id);
+    }
     for (const m of builtIn) expect(builtInModelById(m.id)?.id, m.id).toBe(m.id);
   });
 

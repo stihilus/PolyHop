@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { triangulateFace } from '../core/mesh';
+import { dependenciesOf, isTiled, modelLook, resolveModel } from '../core/components';
+import { planarAxes, triangulateFace } from '../core/mesh';
 import { SMOOTH_ANGLE, faceCornerNormals } from '../core/meshModify';
 import { eulerFromDegrees, isBoxMesh, pointsBounds, worldPoints } from '../core/shape';
 import type { LevelModelInstance, Model, ModelCube, Vec3 } from '../core/types';
@@ -7,6 +8,7 @@ import { uvToRenderCoords } from '../core/uv';
 import { type MeshCollider, isAxisAlignedRotation, meshColliderFromTriangles } from './collision';
 import { type Box, boxFromPoints } from './physics';
 import type { TextureLibrary } from './textures';
+import { tileUvRect, tiledMaterial } from './tileMaterial';
 
 // ---------------------------------------------------------------- geometry
 
@@ -14,6 +16,8 @@ export interface ModelGeometryData {
   positions: Float32Array;
   normals: Float32Array;
   uvs: Float32Array;
+  /** Tile-mapped models: planar coordinates in tiles (the shader wraps them into the tile), as the blocks of a level have. */
+  tileUvs?: Float32Array;
   indices: Uint32Array;
   /** For every triangle: which cube and which face of that cube it belongs to. */
   triCube: Uint16Array;
@@ -37,6 +41,48 @@ function writeCubeVertices(cube: ModelCube, starts: number[], positions: ArrayLi
       normals[o] = n[0];
       normals[o + 1] = n[1];
       normals[o + 2] = n[2];
+    });
+  });
+}
+
+/** Newell's normal of a polygon (unit length, or zero for a degenerate one). */
+function polygonNormal(pts: Vec3[]): Vec3 {
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]!;
+    const b = pts[(i + 1) % pts.length]!;
+    x += (a[1] - b[1]) * (a[2] + b[2]);
+    y += (a[2] - b[2]) * (a[0] + b[0]);
+    z += (a[0] - b[0]) * (a[1] + b[1]);
+  }
+  const l = Math.hypot(x, y, z) || 1;
+  return [x / l, y / l, z / l];
+}
+
+/**
+ * Write the tile coordinates of every face of a cube (in model space, so the picture follows the shape like a
+ * level block's): a flat projection along the face's main axis, one tile per meter, from the face's own corner.
+ */
+function writeCubeTileUvs(cube: ModelCube, starts: number[], out: { [i: number]: number }): void {
+  const pts = worldPoints(cube);
+  cube.mesh.faces.forEach((face, fi) => {
+    const corners = face.v.map((i) => pts[i]!);
+    const { u, v } = planarAxes(polygonNormal(corners));
+    const uc = corners.map((p) => p[0] * u[0] + p[1] * u[1] + p[2] * u[2]);
+    const vc = corners.map((p) => p[0] * v[0] + p[1] * v[1] + p[2] * v[2]);
+    const minU = Math.min(...uc);
+    const minV = Math.min(...vc);
+    const rot = face.tile?.rot ?? 0;
+    const flip = face.tile?.flip === true;
+    corners.forEach((_, k) => {
+      let a = uc[k]! - minU;
+      let b = vc[k]! - minV;
+      if (flip) a = -a;
+      for (let r = 0; r < rot; r++) [a, b] = [-b, a];
+      out[(starts[fi]! + k) * 2] = a;
+      out[(starts[fi]! + k) * 2 + 1] = b;
     });
   });
 }
@@ -67,6 +113,7 @@ export function buildModelGeometryData(model: Model, texW: number, texH: number)
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
+  const tileUvs = isTiled(model) ? new Float32Array(vertexCount * 2) : undefined;
   const indices = new Uint32Array(triCount * 3);
   const triCube = new Uint16Array(triCount);
   const triFace = new Uint16Array(triCount);
@@ -75,6 +122,7 @@ export function buildModelGeometryData(model: Model, texW: number, texH: number)
   model.cubes.forEach((cube, ci) => {
     const starts = faceStart[ci]!;
     writeCubeVertices(cube, starts, positions, normals);
+    if (tileUvs) writeCubeTileUvs(cube, starts, tileUvs);
     cube.mesh.faces.forEach((face, fi) => {
       const coords = uvToRenderCoords(face.uv, texW, texH);
       for (let k = 0; k < face.v.length; k++) {
@@ -92,7 +140,7 @@ export function buildModelGeometryData(model: Model, texW: number, texH: number)
       ti++;
     }
   });
-  return { positions, normals, uvs, indices, triCube, triFace, faceStart };
+  return { positions, normals, uvs, ...(tileUvs ? { tileUvs } : {}), indices, triCube, triFace, faceStart };
 }
 
 export interface Bounds {
@@ -170,6 +218,8 @@ export function modelInstanceMeshes(model: Model, inst: LevelModelInstance): Mes
 export class ModelRender {
   readonly geometry = new THREE.BufferGeometry();
   readonly material: THREE.MeshLambertMaterial;
+  /** True when the faces repeat one tile (the model's mapping is 'tile') instead of using their own UVs. */
+  readonly tiled: boolean;
   bounds: Bounds;
   readonly texW: number;
   readonly texH: number;
@@ -185,17 +235,30 @@ export class ModelRender {
     this.bounds = modelBounds(model);
 
     this.data = buildModelGeometryData(model, this.texW, this.texH);
+    this.tiled = this.data.tileUvs !== undefined;
     this.geometry.setAttribute('position', new THREE.BufferAttribute(this.data.positions, 3));
     this.geometry.setAttribute('normal', new THREE.BufferAttribute(this.data.normals, 3));
     this.geometry.setAttribute('uv', new THREE.BufferAttribute(this.data.uvs, 2));
+    if (this.data.tileUvs) this.geometry.setAttribute('aTileUv', new THREE.BufferAttribute(this.data.tileUvs, 2));
     this.geometry.setIndex(new THREE.BufferAttribute(this.data.indices, 1));
     this.geometry.computeBoundingBox();
     this.geometry.computeBoundingSphere();
 
-    this.material = info
-      ? // models are drawn from both sides so planes work; transparent pixels (alpha < 0.5) are cut out
-        new THREE.MeshLambertMaterial({ map: info.texture, alphaTest: 0.5, side: THREE.DoubleSide })
-      : new THREE.MeshLambertMaterial({ color: '#ff00ff', side: THREE.DoubleSide }); // missing texture
+    const look = modelLook(model);
+    const color = new THREE.Color(look.tint);
+    if (this.tiled) {
+      const tile = look.tile;
+      const side = look.doubleSided ? THREE.DoubleSide : THREE.FrontSide;
+      this.material =
+        tile && info
+          ? tiledMaterial(info.texture, tileUvRect(tile.col, tile.row, info.tileSize, info.width, info.height), color, side, look.opacity ?? 1)
+          : new THREE.MeshLambertMaterial({ color, side });
+    } else {
+      this.material = info
+        ? // models are drawn from both sides so planes work; transparent pixels (alpha < 0.5) are cut out
+          new THREE.MeshLambertMaterial({ map: info.texture, color, alphaTest: 0.5, side: THREE.DoubleSide })
+        : new THREE.MeshLambertMaterial({ color: '#ff00ff', side: THREE.DoubleSide }); // missing texture
+    }
   }
 
   /** The cube and face a raycast triangle belongs to. */
@@ -230,6 +293,11 @@ export class ModelRender {
     writeCubeVertices(cube, starts, pos.array as Float32Array, nor.array as Float32Array);
     pos.needsUpdate = true;
     nor.needsUpdate = true;
+    const tileAttr = this.geometry.getAttribute('aTileUv') as THREE.BufferAttribute | undefined;
+    if (tileAttr) {
+      writeCubeTileUvs(cube, starts, tileAttr.array as Float32Array);
+      tileAttr.needsUpdate = true;
+    }
     // raycasting culls against these, so they must follow the geometry
     this.geometry.computeBoundingBox();
     this.geometry.computeBoundingSphere();
@@ -255,6 +323,8 @@ export class ModelRender {
       g.setAttribute('position', this.geometry.getAttribute('position'));
       g.setAttribute('normal', this.geometry.getAttribute('normal'));
       g.setAttribute('uv', this.geometry.getAttribute('uv'));
+      const tileAttr = this.geometry.getAttribute('aTileUv');
+      if (tileAttr) g.setAttribute('aTileUv', tileAttr);
       g.setIndex(new THREE.BufferAttribute(new Uint32Array(indices), 1));
       out.set(key, g);
     }
@@ -279,6 +349,8 @@ export class ModelRender {
 /** Builds and caches one ModelRender per model; call `invalidate` after structural edits. */
 export class ModelLibrary {
   private renders = new Map<string, ModelRender>();
+  /** The models each render is made from (its variant base and parts), so a change of one redraws the others. */
+  private deps = new Map<string, Set<string>>();
 
   constructor(
     private getModel: (id: string) => Model | undefined,
@@ -288,20 +360,30 @@ export class ModelLibrary {
   get(modelId: string): ModelRender | null {
     const existing = this.renders.get(modelId);
     if (existing) return existing;
-    const model = this.getModel(modelId);
-    if (!model) return null;
+    const raw = this.getModel(modelId);
+    if (!raw) return null;
+    // a variant and a component with parts are drawn from the shapes of the models they are made from
+    const model = resolveModel(raw, this.getModel);
     const render = new ModelRender(model, this.textures);
     this.renders.set(modelId, render);
+    if (model !== raw) this.deps.set(modelId, new Set(dependenciesOf(raw, this.getModel)));
     return render;
   }
 
   invalidate(modelId: string): void {
+    this.drop(modelId);
+    for (const [id, deps] of [...this.deps]) if (deps.has(modelId)) this.drop(id);
+  }
+
+  private drop(modelId: string): void {
     this.renders.get(modelId)?.dispose();
     this.renders.delete(modelId);
+    this.deps.delete(modelId);
   }
 
   clear(): void {
     for (const r of this.renders.values()) r.dispose();
     this.renders.clear();
+    this.deps.clear();
   }
 }

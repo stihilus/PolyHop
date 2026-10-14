@@ -12,7 +12,7 @@ import {
 } from '../src/core/logic';
 import { boxMesh } from '../src/core/mesh';
 import { PRESETS, presetRules, presetSounds, presetVariables } from '../src/core/presets';
-import { builtInPrefab } from '../src/core/prefabs';
+import { PRESET_MODEL_ID, builtInComponent, modelDefaults } from '../src/core/components';
 import { propModelId } from '../src/core/props';
 import {
   type LevelBlock,
@@ -127,12 +127,14 @@ describe('the enemy and the villager presets', () => {
 
   it('both are assets whose models come with them', () => {
     expect(PRESETS.map((p) => p.kind)).toContain('enemy');
-    const enemy = builtInPrefab('enemy', ids).object;
-    expect(enemy.kind === 'model' && enemy.modelId).toBe(propModelId('slime'));
-    expect(enemy.kind === 'model' && enemy.animation).toBe('hop');
-    const npc = builtInPrefab('npc', ids).object;
-    expect(npc.kind === 'model' && npc.modelId).toBe(propModelId('villager'));
-    expect(npc.collide).toBe(true);
+    const enemy = builtInComponent('enemy', ids);
+    expect(enemy.id).toBe(propModelId('slime'));
+    expect(PRESET_MODEL_ID.enemy).toBe(propModelId('slime'));
+    expect(modelDefaults(enemy).animation).toBe('hop');
+    expect(enemy.component).toBe(true);
+    const npc = builtInComponent('npc', ids);
+    expect(npc.id).toBe(propModelId('villager'));
+    expect(modelDefaults(npc).collide).toBe(true);
     const p = normalizeProject({ version: 9, models: [] });
     expect(ensurePresetAssets(p, 'enemy')).toBe(propModelId('slime'));
     expect(p.models.some((m) => m.id === propModelId('slime'))).toBe(true);

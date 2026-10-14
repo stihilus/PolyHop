@@ -239,7 +239,8 @@ describe('the project', () => {
     expect(ensurePresetAssets(p, 'coin')).toBe(ITEM_MODEL_IDS.coin);
     expect(p.models.filter((m) => m.id === ITEM_MODEL_IDS.coin)).toHaveLength(1);
     expect(p.variables.map((v) => v.name)).toEqual(['coins']);
-    expect(ensurePresetAssets(p, 'door')).toBeNull();
+    // a door is a component too (a block-like model), and brings the keys it counts
+    expect(ensurePresetAssets(p, 'door')).toBe('obj-door');
     expect(p.variables.map((v) => v.name).sort()).toEqual(['coins', 'keys']);
   });
 

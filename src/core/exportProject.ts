@@ -1,6 +1,7 @@
-// What goes into an exported game: the project without the parts only the editor needs (game object
-// assets, models nobody places, textures and sounds nothing uses). The game plays exactly the same.
+// What goes into an exported game: the project without the parts only the editor needs (models nobody places,
+// the default behavior of components, textures and sounds nothing uses). The game plays exactly the same.
 
+import { dependenciesOf } from './components';
 import { type Action, SILENT_VOICE } from './logic';
 import { SOUND_IDS } from './sounds';
 import type { Project } from './types';
@@ -38,17 +39,40 @@ export function pruneForExport(project: Project): Project {
   if (p.skin) textureNames.add(p.skin);
   for (const id of [p.soundJump, p.soundDoubleJump, p.soundLand, p.soundStep, project.settings.music]) if (id) soundIds.add(id);
 
-  const models = project.models.filter((m) => modelIds.has(m.id));
-  for (const m of models) if (m.texture) textureNames.add(m.texture);
+  // a variant needs the component it is made from, and a component the components placed inside it
+  const byId = (id: string) => project.models.find((m) => m.id === id);
+  for (const id of [...modelIds]) {
+    const m = byId(id);
+    if (m) for (const dep of dependenciesOf(m, byId)) modelIds.add(dep);
+  }
+
+  // what the editor keeps for itself (the default behavior of a component) means nothing in the game: the instances
+  // have what they do
+  const models = project.models
+    .filter((m) => modelIds.has(m.id))
+    .map((m) => {
+      const { defaults: _defaults, component: _component, ...rest } = m;
+      return rest;
+    });
+  for (const m of models) {
+    if (m.texture) textureNames.add(m.texture);
+    for (const c of m.cubes) for (const f of c.mesh.faces) if (f.tile) textureNames.add(f.tile.texture);
+  }
 
   return {
     ...project,
     models,
     textures: project.textures.filter((t) => textureNames.has(t.name)),
     sounds: project.sounds.filter((s) => soundIds.has(s.id)),
-    prefabs: [],
-    // the links to assets mean nothing in the game
-    levels: project.levels.map((l) => ({ ...l, objects: l.objects.map((o) => ({ ...o, prefab: undefined })) })),
+    // the marks of the components mean nothing in the game
+    levels: project.levels.map((l) => ({
+      ...l,
+      objects: l.objects.map((o) => {
+        if (o.kind !== 'model') return o;
+        const { master: _master, overrides: _overrides, ...rest } = o;
+        return rest;
+      }),
+    })),
     exported: true,
   };
 }

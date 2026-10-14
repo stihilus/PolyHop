@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { pruneForExport } from '../src/core/exportProject';
 import { ITEM_MODEL_IDS } from '../src/core/items';
 import { boxMesh } from '../src/core/mesh';
-import { instantiatePrefab } from '../src/core/prefabs';
+import { makeVariant, placeInstance } from '../src/core/components';
 import { parseProjectText, serializeProject } from '../src/core/projectFile';
 import { SOUND_IDS } from '../src/core/sounds';
 import {
@@ -21,7 +21,6 @@ describe('export pruning', () => {
     const p = createDefaultProject();
     const before = p.models.length;
     const out = pruneForExport(p);
-    expect(out.prefabs).toEqual([]);
     expect(out.exported).toBe(true);
     expect(out.models.length).toBeLessThan(before);
     // the player's body stays
@@ -47,16 +46,36 @@ describe('export pruning', () => {
     expect(out.models.some((m) => m.id === ITEM_MODEL_IDS.coin)).toBe(p.levels.some((l) => l.objects.some((o) => o.kind === 'model' && o.modelId === ITEM_MODEL_IDS.coin)));
   });
 
-  it('drops the link to an asset on every placed object', () => {
+  it('leaves the editor-only marks of components out, and keeps what the game plays', () => {
     const p = createDefaultProject();
-    const coin = instantiatePrefab(p.prefabs.find((x) => x.base === 'coin')!, [1, 1, 1], ids);
-    expect(coin.prefab).toBeDefined();
+    const coinModel = p.models.find((m) => m.id === ITEM_MODEL_IDS.coin)!;
+    const coin = placeInstance(coinModel, [1, 1, 1], ids);
+    coin.master = true;
+    coin.overrides = ['rules'];
     p.levels[0]!.objects.push(coin);
     const out = pruneForExport(p);
-    for (const l of out.levels) for (const o of l.objects) expect(o.prefab).toBeUndefined();
-    // the coin itself is still there, with its rules
     const kept = out.levels[0]!.objects.find((o) => o.id === coin.id)!;
+    expect(kept.kind === 'model' && kept.master).toBeUndefined();
+    expect(kept.kind === 'model' && kept.overrides).toBeUndefined();
+    // the coin itself is still there, with its rules, and its model without the default behavior
     expect(kept.rules.length).toBeGreaterThan(0);
+    const model = out.models.find((m) => m.id === ITEM_MODEL_IDS.coin)!;
+    expect(model.cubes.length).toBeGreaterThan(0);
+    expect(model.defaults).toBeUndefined();
+    expect(model.component).toBeUndefined();
+    // the project itself is untouched
+    expect(coinModel.defaults).toBeDefined();
+  });
+
+  it('keeps what a variant and a component with parts are made of', () => {
+    const p = createDefaultProject();
+    const coin = p.models.find((m) => m.id === ITEM_MODEL_IDS.coin)!;
+    const variant = makeVariant(coin, ids, 'Gold coin');
+    p.models.push(variant);
+    p.levels[0]!.objects.push(placeInstance(variant, [0, 0, 0], ids));
+    const out = pruneForExport(p);
+    expect(out.models.some((m) => m.id === variant.id)).toBe(true);
+    expect(out.models.some((m) => m.id === coin.id)).toBe(true);
   });
 
   it('keeps the sounds that rules, the player and the music use, and drops the rest', () => {
@@ -100,7 +119,6 @@ describe('export pruning', () => {
     expect(back.version).toBe(PROJECT_VERSION);
     expect(back.exported).toBe(true);
     // the built-in game objects are not brought back, and no built-in model is re-added
-    expect(back.prefabs).toEqual([]);
     expect(back.models.map((m) => m.id).sort()).toEqual(pruneForExport(p).models.map((m) => m.id).sort());
     expect(back.levels[0]!.objects.length).toBe(p.levels[0]!.objects.length);
   });
@@ -110,6 +128,6 @@ describe('export pruning', () => {
     const text = serializeProject(p, () => null);
     const back = normalizeProject(parseProjectText(text));
     expect(back.exported).toBeUndefined();
-    expect(back.prefabs.length).toBe(p.prefabs.length);
+    expect(back.models.map((m) => m.id)).toEqual(p.models.map((m) => m.id));
   });
 });

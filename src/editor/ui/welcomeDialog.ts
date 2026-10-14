@@ -58,7 +58,7 @@ export function openWelcomeDialog(options: WelcomeOptions): () => void {
   };
 
   const choices = el('div', { class: 'welcome-choices' });
-  const fresh = choice('New empty project', 'A flat ground, the characters and the game objects. Start from nothing.', options.onNew, true);
+  const fresh = choice('New empty project', 'A flat ground, the characters and ready-made components (coin, door, water ...). Start from nothing.', options.onNew, true);
   choices.append(fresh, choice('Open project…', 'Load a .polyhop.json file from your computer.', options.onOpen));
   if (options.continueName !== null) {
     choices.append(

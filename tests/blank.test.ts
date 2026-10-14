@@ -3,10 +3,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { checkModel } from '../src/core/hytaleStyle';
 import { HUMANOID_FEMALE_ID, HUMANOID_ID } from '../src/core/humanoid';
 import { ITEM_MODEL_IDS } from '../src/core/items';
+import { PRESET_MODEL_ID, isTiled, modelDefaults } from '../src/core/components';
 import { PRESETS } from '../src/core/presets';
 import { propModelId } from '../src/core/props';
 import { SOUND_IDS } from '../src/core/sounds';
-import { PROJECT_VERSION, builtInModelById, createDefaultProject, ensurePresetAssets, normalizeProject } from '../src/core/types';
+import { PROJECT_VERSION, builtInModelById, createDefaultProject, ensurePresetAssets, ensurePresetSupport, normalizeProject } from '../src/core/types';
 import { Game } from '../src/runtime/game';
 import { TextureLibrary } from '../src/runtime/textures';
 
@@ -23,41 +24,30 @@ describe('a new project is blank', () => {
     expect(p.textures).toEqual([]);
   });
 
-  it('has in its Models only what the game objects are made of: the humanoids, the pickups, the Slime and the Villager', () => {
-    expect(p.models.map((m) => m.id)).toEqual([
-      HUMANOID_ID,
-      HUMANOID_FEMALE_ID,
-      ITEM_MODEL_IDS.coin,
-      ITEM_MODEL_IDS.key,
-      ITEM_MODEL_IDS.apple,
-      ITEM_MODEL_IDS.flag,
-      ITEM_MODEL_IDS.trophy,
-      propModelId('slime'),
-      propModelId('villager'),
-    ]);
+  it('has in its Models the characters and the 13 game objects, all of them components', () => {
+    expect(p.models.map((m) => m.id)).toEqual([HUMANOID_ID, HUMANOID_FEMALE_ID, ...PRESETS.map((x) => PRESET_MODEL_ID[x.kind])]);
+    expect(p.models.every((m) => m.component === true)).toBe(true);
     expect(p.player.modelId).toBe(HUMANOID_ID);
     // no furniture, no plants, no building kit
     for (const m of p.models) expect(m.id.startsWith('kit-') || m.id.startsWith('demo-') || m.id === propModelId('chest')).toBe(false);
+    // the pickups and the two characters of the old default are still there under their ids
+    for (const id of Object.values(ITEM_MODEL_IDS)) expect(p.models.some((m) => m.id === id), id).toBe(true);
+    for (const kind of ['slime', 'villager']) expect(p.models.some((m) => m.id === propModelId(kind)), kind).toBe(true);
   });
 
-  it('every game object made of a model has that model in Models', () => {
-    const have = new Set(p.models.map((m) => m.id));
-    const used = p.prefabs.flatMap((x) => (x.object.kind === 'model' ? [x.object.modelId] : []));
-    expect(used).toHaveLength(7);
-    for (const id of used) expect(have.has(id), id).toBe(true);
-  });
-
-  it('every game object is made of cubes: a box block, or a model built of cubes', () => {
-    for (const prefab of p.prefabs) {
-      const o = prefab.object;
-      if (o.kind === 'block') {
-        expect(o.mesh.faces.length, prefab.name).toBe(6);
-        expect(o.mesh.verts.length, prefab.name).toBe(8);
-      } else {
-        const model = p.models.find((m) => m.id === o.modelId)!;
-        expect(model.cubes.length, prefab.name).toBeGreaterThan(0);
-        expect(checkModel(model).problems, prefab.name).toEqual([]);
-      }
+  it('every game object is a component of cubes that does something by default', () => {
+    for (const { kind, label } of PRESETS) {
+      const m = p.models.find((x) => x.id === PRESET_MODEL_ID[kind])!;
+      expect(m, kind).toBeTruthy();
+      expect(m.name, kind).toBe(label);
+      expect(m.cubes.length, kind).toBeGreaterThan(0);
+      expect(checkModel(m).problems, kind).toEqual([]);
+      // water has no rules; everything else reacts to something
+      if (kind !== 'water') expect(modelDefaults(m).rules.length, kind).toBeGreaterThan(0);
+    }
+    // the block-like ones are tile-mapped: a surface that repeats
+    for (const kind of ['door', 'hazard', 'exit', 'platform', 'sign', 'water'] as const) {
+      expect(isTiled(p.models.find((x) => x.id === PRESET_MODEL_ID[kind])!), kind).toBe(true);
     }
   });
 
@@ -67,34 +57,36 @@ describe('a new project is blank', () => {
     expect(p.settings.music).toBe(SOUND_IDS.theme);
   });
 
-  it('has the 13 game objects ready', () => {
-    expect(p.prefabs).toHaveLength(13);
-    expect(p.prefabs.map((x) => x.base).sort()).toEqual(PRESETS.map((x) => x.kind).sort());
+  it('has no separate list of game objects any more: they are components of Models', () => {
+    expect((p as unknown as { prefabs?: unknown }).prefabs).toBeUndefined();
   });
 
-  it('a game object brings its variables and its model when it is placed, if the model was deleted', () => {
+  it('a game object brings its variables, its sounds and its model when it is placed, if the model was deleted', () => {
     for (const { kind } of PRESETS) {
       const copy = createDefaultProject();
-      copy.models = copy.models.filter((m) => !m.id.startsWith('item-') && !m.id.startsWith('prop-'));
-      const modelId = ensurePresetAssets(copy, kind);
-      if (modelId) expect(copy.models.some((m) => m.id === modelId), kind).toBe(true);
+      copy.models = copy.models.filter((m) => m.id !== PRESET_MODEL_ID[kind]);
+      expect(ensurePresetAssets(copy, kind)).toBe(PRESET_MODEL_ID[kind]);
+      expect(copy.models.some((m) => m.id === PRESET_MODEL_ID[kind]), kind).toBe(true);
     }
     const coin = createDefaultProject();
     coin.models = coin.models.filter((m) => m.id !== ITEM_MODEL_IDS.coin);
     expect(ensurePresetAssets(coin, 'coin')).toBe(ITEM_MODEL_IDS.coin);
-    expect(coin.models.some((m) => m.id === ITEM_MODEL_IDS.coin)).toBe(true);
     expect(coin.variables.map((v) => v.name)).toEqual(['coins']);
     // placing the same one again does not add it twice
     ensurePresetAssets(coin, 'coin');
     expect(coin.models.filter((m) => m.id === ITEM_MODEL_IDS.coin)).toHaveLength(1);
+    // the variables and sounds alone, when the model is not wanted
+    const door = createDefaultProject();
+    ensurePresetSupport(door, 'door');
+    expect(door.variables.map((v) => v.name)).toEqual(['keys']);
   });
 
-  it('can picture the model of every game object from its id (for the Assets list)', () => {
-    for (const prefab of p.prefabs) {
-      if (prefab.object.kind !== 'model') continue;
-      const model = builtInModelById(prefab.object.modelId);
-      expect(model, prefab.name).not.toBeNull();
-      expect(model!.id).toBe(prefab.object.modelId);
+  it('can make every built-in model again from its id (to put it back)', () => {
+    for (const { kind } of PRESETS) {
+      const model = builtInModelById(PRESET_MODEL_ID[kind]);
+      expect(model, kind).not.toBeNull();
+      expect(model!.id).toBe(PRESET_MODEL_ID[kind]);
+      expect(model!.component).toBe(true);
     }
     expect(builtInModelById('kit-house')).toBeNull();
     expect(builtInModelById('nope')).toBeNull();
@@ -104,7 +96,7 @@ describe('a new project is blank', () => {
     const back = normalizeProject(JSON.parse(JSON.stringify(p)));
     expect(back.models.map((m) => m.id)).toEqual(p.models.map((m) => m.id));
     expect(back.levels[0]!.objects.map((o) => o.name)).toEqual(['Ground']);
-    expect(back.prefabs).toHaveLength(13);
+    expect(back.models.map((m) => m.component === true)).toEqual(p.models.map((m) => m.component === true));
     expect(back.variables).toEqual([]);
   });
 

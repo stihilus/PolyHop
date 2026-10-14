@@ -1,18 +1,19 @@
+import type { Rule } from '../core/logic';
 import { type PresetKind, presetRules } from '../core/presets';
-import { instantiatePrefab, newPrefab } from '../core/prefabs';
+import { isComponent, modelDefaults, presetOfModel } from '../core/components';
+import type { Model } from '../core/types';
 import { meshBounds } from '../core/mesh';
 import { PRIMITIVES, type PrimitiveKind, primitiveMesh } from '../core/meshGen';
 import { type TerrainInfo, terrainMesh } from '../core/terrain';
 import { importRigJson } from '../core/blockbench';
 import {
   type LevelObject,
-  type Prefab,
   type Vec3,
   builtInModelById,
+  cloneModel,
   createBlock,
   createDefaultProject,
-  createModelInstance,
-  ensurePresetAssets,
+  ensurePresetSupport,
   newId,
 } from '../core/types';
 import type { TextureLibrary } from '../runtime/textures';
@@ -25,7 +26,7 @@ import type { Store, StoreEvent } from './store';
 import { clear, el } from './ui/dom';
 import { keyLabel, openSettingsDialog } from './ui/settingsDialog';
 import { icon } from './ui/icons';
-import { buildBehaviorEditor, buildVariablesPanel } from './ui/logicPanels';
+import { buildBehaviorEditor } from './ui/logicPanels';
 import { renameInline } from './ui/rename';
 import { DEFAULT_EXPORT_OPTIONS, exportGame } from './exportGame';
 import { openExportDialog } from './ui/exportDialog';
@@ -36,8 +37,8 @@ import { openWelcomeDialog } from './ui/welcomeDialog';
 import { kvSet } from '../core/storage';
 import { makeSplitter } from './ui/splitter';
 import { AssetsPanel } from './panels/assetsPanel';
-import type { LeftTab, Mode, PanelHost } from './panels/host';
-import { buildMultiInspector, buildBlockInspector, buildModelInstanceInspector, buildPrefabInspector } from './panels/objectInspectors';
+import type { Mode, PanelHost } from './panels/host';
+import { buildMultiInspector, buildBlockInspector, buildComponentInspector, buildModelInstanceInspector } from './panels/objectInspectors';
 import { buildPlayerInspector } from './panels/playerPanel';
 import { fillHierarchy, fillLevelBar } from './panels/sceneTree';
 import { buildLevelPanel, buildPaintPanel, buildSculptPanel } from './panels/toolPanels';
@@ -57,21 +58,17 @@ export class EditorApp {
 
   private mode: Mode = 'level';
   private levelWorkspace = el('div', { class: 'workspace level-workspace' });
+  /** The level workspace with the Assets dock under it (the whole Level mode). */
+  private levelStack = el('div', { class: 'level-stack' });
+  private dockSplitter = el('div', { class: 'dock-splitter', title: 'Drag to resize the Assets (double-click to fold)' });
   private hierarchy = el('div', { class: 'hierarchy' });
   private assets!: AssetsPanel;
   private host!: PanelHost;
   private sceneToolbar = el('div', { class: 'panel-toolbar' });
   private sceneFilter = '';
-  private assetToolbar = el('div', { class: 'panel-toolbar hidden' });
-  /** "+ New object…": pick what the new game object is made of (a block, or one of the models). */
-  private newObjectSelect = el('select', { class: 'add-shape', title: 'A new game object: choose a plain block or one of your models, then give it a look and a behavior' });
-  private leftTab: LeftTab = 'scene';
-  private varsEl = el('div', { class: 'vars-panel hidden' });
-  private leftTabs = el('div', { class: 'tabs' });
   private levelBar = el('div', { class: 'level-bar' });
+  /** The model selected in the Assets (its properties are shown on the right while no object is selected). */
   private selectedAssetId: string | null = null;
-  /** A game object asset selected in the Assets panel (its properties are shown on the right). */
-  private selectedPrefabId: string | null = null;
   private inspector = el('div', { class: 'inspector' });
   private playBtn = el('button', { class: 'btn play-btn', text: '▶  Play' });
   private modeButtons = new Map<Mode, HTMLButtonElement>();
@@ -266,15 +263,6 @@ export class EditorApp {
       get inspector() {
         return app.inspector;
       },
-      get leftTab() {
-        return app.leftTab;
-      },
-      get selectedPrefabId() {
-        return app.selectedPrefabId;
-      },
-      set selectedPrefabId(id: string | null) {
-        app.selectedPrefabId = id;
-      },
       get selectedAssetId() {
         return app.selectedAssetId;
       },
@@ -282,18 +270,20 @@ export class EditorApp {
       refreshAssets: () => this.refreshAssets(),
       touch: (obj) => this.touch(obj),
       behaviorEditor: (obj, apply) => this.behaviorEditor(obj, apply),
+      componentBehaviorEditor: (model) => this.componentBehaviorEditor(model),
       applyPreset: (obj, kind) => this.applyPreset(obj, kind),
       setMode: (mode) => this.setMode(mode),
-      setLeftTab: (tab) => this.setLeftTab(tab),
       openModel: (id) => this.openModel(id),
       openAnimation: (id) => this.openAnimation(id),
-      selectAsset: (sel) => this.selectAsset(sel),
-      placePrefab: (id, at) => this.placePrefab(id, at),
+      selectAsset: (id) => this.selectAsset(id),
+      selectObject: (id) => this.store.select({ kind: 'object', id }),
       placeModel: (id, at) => this.placeModel(id, at),
+      makeComponent: (id) => this.makeComponent(id),
+      setComponent: (id, on) => this.store.setComponent(id, on),
+      duplicateModel: (id) => this.duplicateModel(id),
       newModel: () => this.newModel(),
       duplicateSelected: () => this.duplicateSelected(),
       deleteSelected: () => this.deleteSelected(),
-      fillNewObjectSelect: () => this.fillNewObjectSelect(),
     };
   }
 
@@ -331,32 +321,6 @@ export class EditorApp {
       el('button', { class: 'btn danger', text: 'Delete', onclick: () => this.deleteSelected() }),
       filter,
     );
-    this.newObjectSelect.addEventListener('change', () => {
-      const choice = this.newObjectSelect.value;
-      this.newObjectSelect.value = '';
-      if (choice) this.newPrefab(choice);
-    });
-    this.assetToolbar.append(
-      el('button', { class: 'btn', text: 'Place', title: 'Add the selected asset to the level', onclick: () => this.placeSelectedAsset() }),
-      el('button', { class: 'btn', text: 'Edit', title: 'Open the selected model in the model editor', onclick: () => this.editSelectedAsset() }),
-      el('button', { class: 'btn', text: '+ New model', onclick: () => this.newModel() }),
-      this.newObjectSelect,
-    );
-
-    for (const [id, label] of [
-      ['scene', 'Scene'],
-      ['assets', 'Assets'],
-      ['vars', 'Variables'],
-    ] as const) {
-      this.leftTabs.append(
-        el('button', {
-          class: `tab${this.leftTab === id ? ' active' : ''}`,
-          'data-tab': id,
-          text: label,
-          onclick: () => this.setLeftTab(id),
-        }),
-      );
-    }
 
     this.undoBtn.addEventListener('click', () => this.store.undoLevel());
     this.redoBtn.addEventListener('click', () => this.store.redoLevel());
@@ -366,12 +330,9 @@ export class EditorApp {
         'aside',
         { class: 'panel panel-left' },
         this.levelBar,
-        this.leftTabs,
+        el('div', { class: 'panel-header' }, el('span', { text: 'Scene' })),
         this.sceneToolbar,
-        this.assetToolbar,
         this.hierarchy,
-        this.assets.element,
-        this.varsEl,
       ),
       el('section', { class: 'viewport-wrap' }, viewportEl, this.overlay, this.hudTop, this.hudBottom, this.shortcuts),
       makeSplitter(this.levelWorkspace, { key: 'polyhop.levelRightWidth', min: 280, maxShare: 0.5 }),
@@ -383,7 +344,11 @@ export class EditorApp {
       ),
     );
 
-    this.root.append(this.buildTopbar(), this.levelWorkspace);
+    // the Assets sit under the whole workspace, across its full width
+    this.assets.onToggle = () => this.toggleDock();
+    this.levelStack.append(this.levelWorkspace, this.dockSplitter, this.assets.element);
+    this.wireDockSplitter();
+    this.root.append(this.buildTopbar(), this.levelStack);
     this.hierarchy.addEventListener('dblclick', (e) => {
       const row = (e.target as HTMLElement).closest<HTMLElement>('[data-object-id]');
       if (row?.dataset.objectId) this.renameObject(row.dataset.objectId);
@@ -412,7 +377,6 @@ export class EditorApp {
       this.hudTop.textContent = `${s.grounded ? 'on ground' : 'airborne'}${s.crouching ? ' · crouching' : ''} · ${s.speed.toFixed(1)} m/s · pos ${s.pos.map((n) => n.toFixed(1)).join(', ')}`;
     };
     this.viewport.onDropModel = (modelId, pos) => this.placeModel(modelId, pos);
-    this.viewport.onDropPrefab = (id, pos) => this.placePrefab(id, pos);
     this.viewport.onToolChange = () => this.refreshInspector();
     this.viewport.onBrushPicked = () => this.refreshInspector();
     this.viewport.onExitRequest = () => {
@@ -539,7 +503,7 @@ export class EditorApp {
     }
     this.mode = mode;
     for (const [id, b] of this.modeButtons) b.classList.toggle('active', id === mode);
-    this.levelWorkspace.classList.toggle('hidden', mode !== 'level');
+    this.levelStack.classList.toggle('hidden', mode !== 'level');
     this.viewport.active = mode === 'level';
     this.modelEditor.setActive(mode === 'model');
     this.paintEditor.setActive(mode === 'paint');
@@ -549,18 +513,56 @@ export class EditorApp {
     if (mode === 'level') this.scheduleAssetsRefresh();
   }
 
-  private setLeftTab(tab: LeftTab): void {
-    this.leftTab = tab;
-    this.varsEl.classList.toggle('hidden', tab !== 'vars');
-    this.sceneToolbar.classList.toggle('hidden', tab !== 'scene');
-    if (tab === 'vars') this.refreshVariables();
-    for (const t of this.leftTabs.querySelectorAll('.tab')) t.classList.toggle('active', t.getAttribute('data-tab') === tab);
-    this.hierarchy.classList.toggle('hidden', tab !== 'scene');
-    this.sceneToolbar.classList.toggle('hidden', tab !== 'scene');
-    this.assets.element.classList.toggle('hidden', tab !== 'assets');
-    this.assetToolbar.classList.toggle('hidden', tab !== 'assets');
-    if (tab === 'assets') this.refreshAssets();
-    this.refreshInspector();
+  // ---------------------------------------------------------------- the Assets dock
+
+  private static readonly DOCK_KEY = 'polyhop.dockHeight';
+  private static readonly DOCK_MIN = 120;
+
+  /** Fold the Assets to their title bar, or unfold them again. */
+  private toggleDock(): void {
+    const folded = !this.levelStack.classList.contains('dock-folded');
+    this.levelStack.classList.toggle('dock-folded', folded);
+    const toggle = this.assets.element.querySelector('.dock-toggle');
+    if (toggle) toggle.textContent = folded ? '▸' : '▾';
+    if (!folded) this.refreshAssets();
+  }
+
+  /** The divider above the Assets: drag to change their height (remembered), double-click to fold. */
+  private wireDockSplitter(): void {
+    const stack = this.levelStack;
+    const set = (h: number | null) => {
+      if (h === null) stack.style.removeProperty('--dock-h');
+      else stack.style.setProperty('--dock-h', `${Math.round(h)}px`);
+    };
+    try {
+      const saved = parseInt(localStorage.getItem(EditorApp.DOCK_KEY) ?? '', 10);
+      if (Number.isFinite(saved) && saved >= EditorApp.DOCK_MIN) set(saved);
+    } catch {
+      // the default height is fine
+    }
+    this.dockSplitter.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.dockSplitter.setPointerCapture(e.pointerId);
+      this.dockSplitter.classList.add('dragging');
+      const rect = stack.getBoundingClientRect();
+      const move = (ev: PointerEvent) => set(Math.min(rect.height * 0.7, Math.max(EditorApp.DOCK_MIN, rect.bottom - ev.clientY)));
+      const up = () => {
+        this.dockSplitter.classList.remove('dragging');
+        this.dockSplitter.removeEventListener('pointermove', move);
+        this.dockSplitter.removeEventListener('pointerup', up);
+        this.dockSplitter.removeEventListener('pointercancel', up);
+        try {
+          const h = parseInt(stack.style.getPropertyValue('--dock-h'), 10);
+          if (Number.isFinite(h)) localStorage.setItem(EditorApp.DOCK_KEY, String(h));
+        } catch {
+          // not kept
+        }
+      };
+      this.dockSplitter.addEventListener('pointermove', move);
+      this.dockSplitter.addEventListener('pointerup', up);
+      this.dockSplitter.addEventListener('pointercancel', up);
+    });
+    this.dockSplitter.addEventListener('dblclick', () => this.toggleDock());
   }
 
   // ---------------------------------------------------------------- actions
@@ -638,34 +640,17 @@ export class EditorApp {
     this.viewport.bar.setTool('sculpt');
   }
 
+  /**
+   * A model into the level at `position`: an instance of it, with what it does by default. A built-in game object
+   * brings the variables and sounds its rules use. An ordinary object that is already placed gets a copy of its shapes.
+   */
   private placeModel(modelId: string, position: Vec3): void {
     const model = this.store.getModel(modelId);
     if (!model) return;
-    this.store.addObject(createModelInstance(model, position));
-    this.setLeftTab('scene');
-  }
-
-  /** A game object asset into the level, with the variables, sounds and model it needs. */
-  private placePrefab(id: string, position: Vec3): void {
-    const prefab = this.store.getPrefab(id);
-    if (!prefab) return;
-    if (prefab.base) this.ensureAssets(prefab.base);
-    this.store.addObject(instantiatePrefab(prefab, position, newId));
-    this.setLeftTab('scene');
-  }
-
-  private placeSelectedAsset(): void {
-    if (this.selectedPrefabId) this.placePrefab(this.selectedPrefabId, this.viewport.viewCenterPoint());
-    else if (this.selectedAssetId) this.placeModel(this.selectedAssetId, this.viewport.viewCenterPoint());
-  }
-
-  private editSelectedAsset(): void {
-    // a game object made of a model opens that model
-    const prefab = this.selectedPrefabId ? this.store.getPrefab(this.selectedPrefabId) : undefined;
-    const ofPrefab = prefab && prefab.object.kind === 'model' ? prefab.object.modelId : null;
-    const id = this.selectedAssetId ?? ofPrefab ?? this.store.project.models[0]?.id ?? null;
-    if (id) this.openModel(id);
-    else this.setMode('model');
+    const kind = presetOfModel(modelId);
+    if (kind) this.ensureSupport(kind);
+    this.store.placeModelAt(modelId, position);
+    this.selectedAssetId = null;
   }
 
   /**
@@ -681,37 +666,42 @@ export class EditorApp {
     this.modelEditor.open(modelId);
   }
 
-  /** A fresh game object asset made of a plain block or of the given model. */
-  private newPrefab(choice: string): void {
-    let prefab: Prefab;
-    if (choice === 'block') {
-      const tile = this.textures.atlasWithTile(7, 0) ?? this.textures.names()[0];
-      prefab = newPrefab({ kind: 'block', tile: tile ? { texture: tile, col: 7, row: 0 } : null }, 'New object', newId);
-    } else {
-      const model = this.store.getModel(choice);
-      if (!model) return;
-      prefab = newPrefab({ kind: 'model', modelId: model.id }, model.name, newId);
+  /** Select a model in the Assets: its properties are shown on the right (the selected objects are let go). */
+  private selectAsset(modelId: string | null): void {
+    this.selectedAssetId = modelId;
+    if (modelId && this.store.selection.kind !== 'none') {
+      // selecting an object clears the asset again (see the 'selection' event); do it in this order
+      this.store.select({ kind: 'none' });
+      this.selectedAssetId = modelId;
     }
-    this.store.project.prefabs.push(prefab);
-    this.store.prefabChanged(prefab.id);
-    this.selectAsset({ prefab: prefab.id });
-  }
-
-  /** The choices of "+ New object…": a block, or any model of the project. */
-  private fillNewObjectSelect(): void {
-    const select = this.newObjectSelect;
-    select.replaceChildren(el('option', { value: '', text: '+ New object…' }), el('option', { value: 'block', text: 'Plain block' }));
-    const group = el('optgroup', { label: 'Made of a model' });
-    for (const m of this.store.project.models) group.append(el('option', { value: m.id, text: m.name }));
-    if (group.childElementCount > 0) select.append(group);
-  }
-
-  /** Select a model or a game object in the Assets panel. */
-  private selectAsset(sel: { model?: string; prefab?: string } | null): void {
-    this.selectedAssetId = sel?.model ?? null;
-    this.selectedPrefabId = sel?.prefab ?? null;
     this.refreshAssets();
     this.refreshInspector();
+  }
+
+  /** The object becomes a component; the new component is shown selected in the Assets. */
+  private makeComponent(objectId: string): void {
+    const id = this.store.makeComponent(objectId);
+    if (!id) {
+      this.hudTop.textContent = 'This object cannot be a component.';
+      return;
+    }
+    this.hudTop.textContent = 'Now a component: it is in the Assets, and what you place from there follows it.';
+    window.clearTimeout(this.noticeTimer);
+    this.noticeTimer = window.setTimeout(() => {
+      if (!this.viewport.playing) this.hudTop.textContent = '';
+    }, 4000);
+    this.refreshAssets();
+    this.refreshInspector();
+    this.refreshHierarchy();
+  }
+
+  /** A copy of a model (its shapes, look and behavior) as another asset. */
+  private duplicateModel(modelId: string): void {
+    const m = this.store.getModel(modelId);
+    if (!m) return;
+    const copy = cloneModel(m);
+    this.store.addModel(copy);
+    this.selectAsset(copy.id);
   }
 
   /** Switch to the animation editor with a model open. */
@@ -819,7 +809,10 @@ export class EditorApp {
     this.updateHistoryButtons();
     switch (e.type) {
       case 'selection':
+        // an object picked in the level takes the properties panel from the asset
+        if (this.store.selection.kind !== 'none') this.selectedAssetId = null;
         this.refreshHierarchy();
+        this.refreshAssets();
         this.refreshInspector();
         break;
       case 'object-changed':
@@ -844,13 +837,11 @@ export class EditorApp {
         break;
       case 'project-replaced':
         this.assets.clearThumbs();
-        this.selectedPrefabId = null;
         this.selectedAssetId = null;
         this.refreshAll();
         this.updatePlayUi();
         break;
       case 'variables-changed':
-        if (this.leftTab === 'vars') this.refreshVariables();
         // the variable lists of the rule editors depend on them
         if (this.mode === 'level' && this.store.selection.kind === 'object') this.scheduleInspectorRefresh();
         break;
@@ -863,20 +854,17 @@ export class EditorApp {
         this.assets.dropThumb(e.id);
         this.scheduleAssetsRefresh();
         break;
+      case 'components-changed':
+        // the look or the behavior of a component changed (also by an undo)
+        this.assets.dropThumb(e.id);
+        this.scheduleAssetsRefresh();
+        if (this.mode === 'level' && this.selectedAssetId === e.id) this.scheduleInspectorRefresh();
+        break;
       case 'texture-changed':
         // any texture edit can change how every model looks
         this.assets.clearThumbs();
         this.scheduleAssetsRefresh();
         if (e.structural && this.mode === 'level') this.refreshInspector();
-        break;
-      case 'prefabs-changed':
-        this.assets.dropPrefabThumbs();
-        this.scheduleAssetsRefresh();
-        // a deleted or reset asset can no longer be the selected one
-        if (this.selectedPrefabId && !this.store.getPrefab(this.selectedPrefabId)) {
-          this.selectedPrefabId = null;
-          this.refreshInspector();
-        }
         break;
       case 'model-added':
       case 'model-removed':
@@ -901,8 +889,8 @@ export class EditorApp {
   }
 
   private refreshAssets(): void {
-    // the thumbnails are rendered here: only when the panel is there to show them
-    if (this.leftTab !== 'assets') return;
+    // the thumbnails are rendered here: only when the dock is there to show them
+    if (this.mode !== 'level' || this.levelStack.classList.contains('dock-folded')) return;
     this.assets.render();
   }
 
@@ -911,69 +899,116 @@ export class EditorApp {
     this.assetsTimer = window.setTimeout(() => this.refreshAssets(), 150);
   }
 
-  private refreshVariables(): void {
-    clear(this.varsEl);
-    this.varsEl.append(
-      buildVariablesPanel({
-        variables: () => this.store.project.variables,
-        add: () => this.store.addVariable(),
-        remove: (id) => this.store.removeVariable(id),
-        rename: (id, name) => this.store.renameVariable(id, name),
-        changed: () => this.store.variablesChanged(),
-      }),
-    );
+  /**
+   * Where the rules of an object are edited, and what an edit means. An ordinary object and a block have their own
+   * rules. The master placement of a component edits the default behavior of the component (all its instances
+   * follow). Another instance edits its own rules and from then on sets them itself.
+   */
+  private rulesOwner(obj: LevelObject): { rules: Rule[]; changed: () => void; replace: (rules: Rule[]) => void } {
+    const model = obj.kind === 'model' ? this.store.getModel(obj.modelId) : undefined;
+    if (obj.kind === 'model' && model && isComponent(model)) {
+      if (obj.master) {
+        const d = modelDefaults(model);
+        const ensure = () => {
+          model.defaults ??= { ...d, rules: d.rules };
+          return model.defaults;
+        };
+        return {
+          rules: ensure().rules,
+          changed: () => this.store.componentChanged(model.id, 'edit:rules'),
+          replace: (rules) => {
+            ensure().rules = rules;
+            this.store.componentChanged(model.id, 'edit:rules');
+          },
+        };
+      }
+      return {
+        rules: obj.rules,
+        changed: () => {
+          this.store.overrideInstance(obj.id, 'rules');
+          this.store.objectChanged(obj.id);
+        },
+        replace: (rules) => {
+          obj.rules = rules;
+          this.store.overrideInstance(obj.id, 'rules');
+          this.store.objectChanged(obj.id);
+        },
+      };
+    }
+    return {
+      rules: obj.rules,
+      changed: () => this.store.objectChanged(obj.id),
+      replace: (rules) => {
+        obj.rules = rules;
+        this.store.objectChanged(obj.id);
+      },
+    };
   }
 
   /** The rule editor of an object. */
   private behaviorEditor(obj: LevelObject, apply: (kind: PresetKind) => void): HTMLElement {
-    // an asset has no neighbours in a level to point at; a placed object does
-    const inLevel = !this.isPrefabObject(obj);
+    const owner = this.rulesOwner(obj);
     return buildBehaviorEditor({
-      rules: obj.rules,
+      rules: owner.rules,
       variables: () => this.store.project.variables.map((v) => v.name),
       sounds: () => this.store.project.sounds.map((x) => ({ id: x.id, name: x.name })),
-      objects: () => (inLevel ? this.store.objects.map((o) => ({ id: o.id, name: o.name })) : []),
+      objects: () => this.store.objects.map((o) => ({ id: o.id, name: o.name })),
       levels: () => this.store.project.levels.map((l) => ({ id: l.id, name: l.name })),
       animations: (target) => {
         const o = target ? this.store.getObject(target) : obj;
         const model = o && o.kind === 'model' ? this.store.getModel(o.modelId) : undefined;
         return model ? model.clips.map((c) => c.name) : [];
       },
-      onChange: () => this.touch(obj),
+      onChange: () => owner.changed(),
       applyPreset: apply,
       newId,
     });
   }
 
-  /** Give an object the behavior of a preset (and the variables and model it needs). */
+  /** The rule editor of what the placements of a component do by default (an asset has no neighbours to point at). */
+  private componentBehaviorEditor(model: Model): HTMLElement {
+    const ensure = () => {
+      model.defaults ??= { ...modelDefaults(model), rules: [] };
+      return model.defaults;
+    };
+    return buildBehaviorEditor({
+      rules: ensure().rules,
+      variables: () => this.store.project.variables.map((v) => v.name),
+      sounds: () => this.store.project.sounds.map((x) => ({ id: x.id, name: x.name })),
+      objects: () => [],
+      levels: () => this.store.project.levels.map((l) => ({ id: l.id, name: l.name })),
+      animations: () => model.clips.map((c) => c.name),
+      onChange: () => this.store.componentChanged(model.id, 'edit:rules'),
+      applyPreset: (kind) => {
+        this.ensureSupport(kind);
+        ensure().rules = presetRules(kind, newId);
+        this.store.componentChanged(model.id, 'edit:rules');
+        this.refreshInspector();
+      },
+      newId,
+    });
+  }
+
+  /** Give an object the behavior of a preset (and the variables and sounds it needs). */
   private applyPreset(obj: LevelObject, kind: PresetKind): void {
-    this.ensureAssets(kind);
-    obj.rules = presetRules(kind, newId);
-    this.touch(obj);
+    this.ensureSupport(kind);
+    this.rulesOwner(obj).replace(presetRules(kind, newId));
     this.refreshHierarchy();
     this.refreshInspector();
   }
 
-  /** The object is the template of a game object asset (not an object of a level). */
-  private isPrefabObject(obj: LevelObject): boolean {
-    return this.store.project.prefabs.some((p) => p.object === obj);
-  }
-
-  /** An object (or an asset's template) was edited. */
+  /** An object was edited. */
   private touch(obj: LevelObject): void {
-    const prefab = this.store.project.prefabs.find((p) => p.object === obj);
-    if (prefab) this.store.prefabChanged(prefab.id);
-    else this.store.objectChanged(obj.id);
+    this.store.objectChanged(obj.id);
   }
 
-  /** The preset's variables and model are added to the project when it lacks them. */
-  private ensureAssets(kind: PresetKind): string | null {
-    const before = new Set(this.store.project.models.map((m) => m.id));
+  /** The variables and sounds a preset's rules use are added to the project when it lacks them. */
+  private ensureSupport(kind: PresetKind): void {
     const varsBefore = this.store.project.variables.length;
-    const modelId = ensurePresetAssets(this.store.project, kind);
-    for (const m of this.store.project.models) if (!before.has(m.id)) this.store.emit({ type: 'model-added', id: m.id });
+    const soundsBefore = this.store.project.sounds.length;
+    ensurePresetSupport(this.store.project, kind);
     if (this.store.project.variables.length !== varsBefore) this.store.emit({ type: 'variables-changed' });
-    return modelId;
+    if (this.store.project.sounds.length !== soundsBefore) this.store.emit({ type: 'sounds-changed' });
   }
 
   /** Rename a level object in place in the scene list. */
@@ -1000,13 +1035,14 @@ export class EditorApp {
   private refreshInspector(): void {
     clear(this.inspector);
     const sel = this.store.selection;
-    const assetOpen = this.leftTab === 'assets' && this.selectedPrefabId ? this.store.getPrefab(this.selectedPrefabId) : undefined;
+    // a model selected in the Assets shows its properties while no object of the level is selected
+    const assetOpen = this.selectedAssetId && sel.kind === 'none' ? this.store.getModel(this.selectedAssetId) : undefined;
     if (this.viewport.bar.tool === 'paint' && !this.viewport.playing) {
       this.inspector.append(buildPaintPanel(this.host));
     } else if (this.viewport.bar.tool === 'sculpt' && !this.viewport.playing) {
       this.inspector.append(buildSculptPanel(this.host));
     } else if (assetOpen) {
-      buildPrefabInspector(this.host, assetOpen);
+      buildComponentInspector(this.host, assetOpen);
     } else if (sel.kind === 'player') {
       buildPlayerInspector(this.host);
     } else if (sel.kind === 'object' && this.store.selectedIds().length > 1) {

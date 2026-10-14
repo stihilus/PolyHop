@@ -1,22 +1,37 @@
 import { normalizeVariables, renameVariableInRules } from '../core/logic';
 import { type SkyPreset, normalizeLook } from '../core/look';
-import { applyPrefabTo, builtInPrefab, cloneObject, placedFrom, prefabFromObject, savePrefabFrom } from '../core/prefabs';
+import {
+  clearOverride,
+  componentFromBlock,
+  componentFromInstance,
+  dependentsOf,
+  instancesOf,
+  isComponent,
+  makeVariant,
+  placeInstance,
+  setOverride,
+  syncInstances,
+  builtInComponent,
+  presetOfModel,
+} from '../core/components';
+import { scaleMeshToSize } from '../core/mesh';
 import { renameBoneInModel } from '../core/rig';
 import {
   DEFAULT_SKY,
   type LevelData,
+  type InstanceOverride,
+  type LevelModelInstance,
   type LevelObject,
   type Model,
   type PlayerSettings,
-  type Prefab,
   type Project,
   type ProjectTexture,
   type Selection,
+  cloneModel,
   createLevelData,
   emptyLevelObjects,
   newId,
   normalizeObject,
-  normalizePrefabs,
 } from '../core/types';
 
 export type StoreEvent =
@@ -27,8 +42,8 @@ export type StoreEvent =
   | { type: 'level-restored' }
   /** Another level is being edited, or the list of levels changed (added, removed, renamed, reordered). */
   | { type: 'levels-changed' }
-  /** The list of game object assets, or one of them, changed. */
-  | { type: 'prefabs-changed' }
+  /** The look or the default behavior of a component changed (its instances follow it). */
+  | { type: 'components-changed'; id: string }
   /** The sky color of the level being edited changed. */
   | { type: 'sky-changed' }
   /** An undo step was recorded (the undo / redo buttons need a refresh). */
@@ -88,7 +103,17 @@ export class Store {
       levelIndex: this.levelIndex,
       player: this.project.player,
       variables: this.project.variables,
-      prefabs: this.project.prefabs,
+      // what makes a model a component (not its shapes: those have the history of the model editor)
+      components: this.project.models.map((m) => ({
+        id: m.id,
+        name: m.name,
+        component: m.component,
+        mapping: m.mapping,
+        look: m.look,
+        defaults: m.defaults,
+        // a block-like component is its one shape: resizing it in the level is an undo step of the level
+        shapes: m.mapping === 'tile' && m.cubes.length <= 2 ? m.cubes : undefined,
+      })),
     });
   }
 
@@ -143,7 +168,15 @@ export class Store {
       levelIndex: number;
       player: PlayerSettings;
       variables?: unknown;
-      prefabs?: unknown;
+      components?: {
+        id: string;
+        name: string;
+        component?: boolean;
+        mapping?: 'tile';
+        look?: Model['look'];
+        defaults?: Model['defaults'];
+        shapes?: Model['cubes'];
+      }[];
     };
     this.project.levels = data.levels.map((l) => ({
       id: l.id ?? newId(),
@@ -156,7 +189,25 @@ export class Store {
     }));
     this.levelIndex = Math.min(Math.max(0, data.levelIndex), this.project.levels.length - 1);
     if (data.variables !== undefined) this.project.variables = normalizeVariables(data.variables, newId);
-    if (data.prefabs !== undefined) this.project.prefabs = normalizePrefabs(data.prefabs);
+    const reshaped: string[] = [];
+    for (const c of data.components ?? []) {
+      const m = this.getModel(c.id);
+      if (!m) continue;
+      m.name = c.name;
+      if (c.component) m.component = true;
+      else delete m.component;
+      if (c.mapping) m.mapping = c.mapping;
+      else delete m.mapping;
+      if (c.look) m.look = c.look;
+      else delete m.look;
+      if (c.defaults) m.defaults = c.defaults;
+      else delete m.defaults;
+      if (c.shapes && JSON.stringify(c.shapes) !== JSON.stringify(m.cubes)) {
+        m.cubes = c.shapes;
+        reshaped.push(m.id);
+      }
+    }
+    for (const id of reshaped) this.emit({ type: 'model-changed', id, structural: true });
     Object.assign(this.project.player, data.player); // keep the object identity the game holds on to
     this.levelCurrent = snapshot;
     this.levelLabel = '';
@@ -168,7 +219,7 @@ export class Store {
     }
     this.emit({ type: 'level-restored' });
     this.emit({ type: 'levels-changed' });
-    this.emit({ type: 'prefabs-changed' });
+    for (const c of data.components ?? []) this.emit({ type: 'components-changed', id: c.id });
     this.emit({ type: 'variables-changed' });
     this.emit({ type: 'selection' });
   }
@@ -378,6 +429,18 @@ export class Store {
       idMap.set(src.id, copy.id);
       copy.name = `${src.name} copy`;
       copy.position = [src.position[0] + 1, src.position[1], src.position[2] + 1];
+      if (copy.kind === 'model') {
+        // a copy of an instance is another instance (never a master); a copy of a plain object has shapes of its own
+        delete copy.master;
+        const model = this.getModel(copy.modelId);
+        if (model && !isComponent(model)) {
+          const own = cloneModel(model);
+          own.name = model.name;
+          this.project.models.push(own);
+          this.emit({ type: 'model-added', id: own.id });
+          copy.modelId = own.id;
+        }
+      }
       return copy;
     });
     for (const c of copies) {
@@ -440,10 +503,14 @@ export class Store {
       this.project.player.modelId = null;
       this.emit({ type: 'player-changed' });
     }
-    // your own assets built on this model go with it (the built-in ones bring the model back when placed)
-    const before = this.project.prefabs.length;
-    this.project.prefabs = this.project.prefabs.filter((p) => p.base !== null || !(p.object.kind === 'model' && p.object.modelId === id));
-    if (this.project.prefabs.length !== before) this.emit({ type: 'prefabs-changed' });
+    // variants of it and components that hold it as a part lose it (they keep what they have of their own)
+    for (const m of this.project.models) {
+      if (m.variantOf === id) delete m.variantOf;
+      if (m.parts) {
+        m.parts = m.parts.filter((p) => p.modelId !== id);
+        if (m.parts.length === 0) delete m.parts;
+      }
+    }
     this.project.models.splice(i, 1);
     this.emit({ type: 'model-removed', id });
   }
@@ -468,102 +535,172 @@ export class Store {
     this.emit({ type: 'model-changed', id, structural });
   }
 
-  // ---------------------------------------------------------------- game object assets (prefabs)
+  // ---------------------------------------------------------------- components
 
-  getPrefab(id: string): Prefab | undefined {
-    return this.project.prefabs.find((p) => p.id === id);
-  }
-
-  /** An asset was edited (its template, its name). One undo step per field, merged while typing. */
-  prefabChanged(id: string): void {
-    this.commitLevel(`edit:prefab:${id}`);
-    this.emit({ type: 'prefabs-changed' });
-  }
-
-  /** A new asset made from an object of the level; the object now remembers it. Returns its id. */
-  makePrefab(objectId: string): string | null {
+  /**
+   * The object becomes a component: a block turns into a one-shape model, a model placement makes its model one.
+   * The object stays where it is as the master placement. Returns the id of the component, or null when it cannot be one.
+   */
+  makeComponent(objectId: string): string | null {
     const obj = this.getObject(objectId);
     if (!obj) return null;
-    const prefab = prefabFromObject(obj, obj.name, newId);
-    this.project.prefabs.push(prefab);
-    obj.prefab = prefab.id;
-    this.commitLevel('add-prefab');
-    this.emit({ type: 'prefabs-changed' });
-    this.emit({ type: 'object-changed', id: objectId });
-    return prefab.id;
-  }
-
-  duplicatePrefab(id: string): string | null {
-    const src = this.getPrefab(id);
-    if (!src) return null;
-    const copy: Prefab = { id: newId(), name: `${src.name} copy`, base: src.base, object: cloneObject(src.object, newId) };
-    delete copy.object.prefab;
-    this.project.prefabs.push(copy);
-    this.commitLevel('add-prefab');
-    this.emit({ type: 'prefabs-changed' });
-    return copy.id;
-  }
-
-  /** Your own assets can be deleted; the objects placed from it stay, without the link. */
-  removePrefab(id: string): boolean {
-    const p = this.getPrefab(id);
-    if (!p || p.base !== null) return false;
-    this.project.prefabs = this.project.prefabs.filter((x) => x.id !== id);
-    for (const l of this.project.levels) for (const o of l.objects) if (o.prefab === id) delete o.prefab;
-    this.commitLevel('remove-prefab');
-    this.emit({ type: 'prefabs-changed' });
-    return true;
-  }
-
-  /** A built-in game object back to how it came. */
-  resetPrefab(id: string): boolean {
-    const p = this.getPrefab(id);
-    if (!p || p.base === null) return false;
-    const fresh = builtInPrefab(p.base, newId);
-    p.name = fresh.name;
-    p.object = fresh.object;
-    this.commitLevel('reset-prefab');
-    this.emit({ type: 'prefabs-changed' });
-    return true;
-  }
-
-  /** Bring every object placed from the asset (in all levels) in line with it. Returns how many. */
-  updatePlacedCopies(id: string): number {
-    const prefab = this.getPrefab(id);
-    if (!prefab) return 0;
-    let n = 0;
-    for (const l of this.project.levels) {
-      for (const o of placedFrom(l.objects, id)) {
-        applyPrefabTo(o, prefab, newId);
-        n++;
-      }
+    if (obj.kind === 'block') {
+      if (obj.terrain) return null; // a sculpted ground belongs to its place
+      const { model, instance } = componentFromBlock(obj, newId);
+      this.project.models.push(model);
+      const at = this.objects.indexOf(obj);
+      this.objects[at] = instance;
+      this.emit({ type: 'model-added', id: model.id });
+      this.emit({ type: 'object-changed', id: instance.id });
+      this.commitLevel('make-component');
+      return model.id;
     }
-    if (n === 0) return 0;
-    this.commitLevel('update-placed');
-    for (const o of placedFrom(this.objects, id)) this.emit({ type: 'object-changed', id: o.id });
-    return n;
+    const model = this.getModel(obj.modelId);
+    if (!model) return null;
+    if (!isComponent(model)) {
+      componentFromInstance(model, obj, newId);
+      this.commitLevel('make-component');
+      this.emit({ type: 'components-changed', id: model.id });
+      this.emit({ type: 'object-changed', id: obj.id });
+    }
+    return model.id;
   }
 
-  /** One object back in line with its asset. */
-  updateFromPrefab(objectId: string): boolean {
-    const obj = this.getObject(objectId);
-    const prefab = obj?.prefab ? this.getPrefab(obj.prefab) : undefined;
-    if (!obj || !prefab) return false;
-    applyPrefabTo(obj, prefab, newId);
-    this.emit({ type: 'object-changed', id: obj.id });
-    this.commitLevel('update-from-prefab');
+  /** A model is a component (or not any more). Placed instances keep what they have. */
+  setComponent(modelId: string, on: boolean): void {
+    const m = this.getModel(modelId);
+    if (!m || isComponent(m) === on) return;
+    if (on) m.component = true;
+    else {
+      delete m.component;
+      for (const inst of instancesOf(this.project.levels, modelId)) delete inst.master;
+    }
+    this.commitLevel('component');
+    this.emit({ type: 'components-changed', id: modelId });
+  }
+
+  /**
+   * The look or the default behavior of a component was edited: its instances follow (what an instance sets itself
+   * stays). One undo step per field, merged while typing.
+   */
+  componentChanged(modelId: string, label = 'edit:component'): void {
+    const m = this.getModel(modelId);
+    if (!m) return;
+    const changed = syncInstances(this.project.levels, m, newId);
+    for (const o of changed) if (this.getObject(o.id)) this.emit({ type: 'object-changed', id: o.id });
+    this.commitLevel(`${label}:${modelId}`);
+    this.emit({ type: 'components-changed', id: modelId });
+  }
+
+  /** The look of a component (tile, tint, mapping ...) changed: it is drawn again everywhere. */
+  componentLookChanged(modelId: string, label = 'edit:look'): void {
+    this.modelChanged(modelId, true);
+    this.commitLevel(`${label}:${modelId}`);
+    this.emit({ type: 'components-changed', id: modelId });
+  }
+
+  /** A variant of a component, as a new component (its own look and behavior, the shapes of the component). */
+  addVariant(baseId: string): string | null {
+    const base = this.getModel(baseId);
+    if (!base) return null;
+    const v = makeVariant(base, newId);
+    this.project.models.push(v);
+    this.commitLevel('add-variant');
+    this.emit({ type: 'model-added', id: v.id });
+    return v.id;
+  }
+
+  /** The instance sets this itself from now on. */
+  overrideInstance(objectId: string, key: InstanceOverride): void {
+    const o = this.getObject(objectId);
+    if (!o || o.kind !== 'model') return;
+    setOverride(o, key);
+  }
+
+  /** The instance follows its component again (for one thing, or for everything). */
+  resetInstance(objectId: string, key?: InstanceOverride): void {
+    const o = this.getObject(objectId);
+    if (!o || o.kind !== 'model') return;
+    const m = this.getModel(o.modelId);
+    if (!m) return;
+    clearOverride(o, m, newId, key);
+    this.emit({ type: 'object-changed', id: o.id });
+    this.commitLevel('reset-instance');
+  }
+
+  /** The instance becomes an object of its own: it gets shapes of its own and no longer follows the component. */
+  detachInstance(objectId: string): boolean {
+    const o = this.getObject(objectId);
+    if (!o || o.kind !== 'model') return false;
+    const m = this.getModel(o.modelId);
+    if (!m) return false;
+    const own = cloneModel(m);
+    own.name = m.name;
+    delete own.component;
+    this.project.models.push(own);
+    o.modelId = own.id;
+    delete o.master;
+    delete o.overrides;
+    this.emit({ type: 'model-added', id: own.id });
+    this.emit({ type: 'object-changed', id: o.id });
+    this.commitLevel('detach');
     return true;
   }
 
-  /** The asset takes over everything of this object. */
-  saveToPrefab(objectId: string): boolean {
-    const obj = this.getObject(objectId);
-    const prefab = obj?.prefab ? this.getPrefab(obj.prefab) : undefined;
-    if (!obj || !prefab) return false;
-    savePrefabFrom(prefab, obj, newId);
-    this.commitLevel('save-prefab');
-    this.emit({ type: 'prefabs-changed' });
+  /** The master placement of a component in the level being edited, if there is one. */
+  masterOf(modelId: string): LevelModelInstance | undefined {
+    return instancesOf(this.project.levels, modelId).find((o) => o.master === true);
+  }
+
+  /** A built-in component back to how it came (shapes, look and behavior). */
+  resetBuiltIn(modelId: string): boolean {
+    const kind = presetOfModel(modelId);
+    const m = this.getModel(modelId);
+    if (!kind || !m) return false;
+    const fresh = builtInComponent(kind, newId);
+    Object.assign(m, { ...fresh, name: m.name });
+    this.componentChanged(modelId, 'reset-component');
+    this.modelChanged(modelId, true);
     return true;
+  }
+
+  /**
+   * Resize the shape of a component made of one shape (a block-like one) to this size in meters: every instance
+   * follows. Returns false when the component has more than one shape (resize the placement instead).
+   */
+  resizeComponent(modelId: string, size: [number, number, number]): boolean {
+    const m = this.getModel(modelId);
+    if (!m || m.cubes.length !== 1) return false;
+    scaleMeshToSize(m.cubes[0]!.mesh, size);
+    this.modelChanged(modelId, true);
+    this.commitLevel(`edit:size:${modelId}`);
+    this.emit({ type: 'components-changed', id: modelId });
+    return true;
+  }
+
+  /** Is this one of the built-in game objects (it can be put back as it came)? */
+  canResetBuiltIn(modelId: string): boolean {
+    return presetOfModel(modelId) !== null;
+  }
+
+  /** Models that depend on this one (variants, holders of it as a part). */
+  dependents(modelId: string): string[] {
+    return dependentsOf(this.project.models, modelId);
+  }
+
+  /** A new placement of a model: an instance with its defaults. A plain object placed again gets shapes of its own. */
+  placeModelAt(modelId: string, at: [number, number, number]): LevelModelInstance | null {
+    let model = this.getModel(modelId);
+    if (!model) return null;
+    if (!isComponent(model) && instancesOf(this.project.levels, model.id).length > 0) {
+      const own = cloneModel(model);
+      own.name = model.name;
+      this.addModel(own);
+      model = own;
+    }
+    const inst = placeInstance(model, at, newId);
+    this.addObject(inst);
+    return inst;
   }
 
   // ---------------------------------------------------------------- variables

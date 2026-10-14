@@ -8,11 +8,11 @@ import { geometryHash } from './modelHash';
 import { ITEM_MODEL_IDS, type ItemKind, createItemModel } from './items';
 import { type Rule, type Variable, normalizeRules, normalizeVariables } from './logic';
 import { PRESETS, type PresetKind, missingVariables, presetSounds, presetVariables } from './presets';
-import { PRESET_ITEM, PRESET_PROP, builtInPrefabs } from './prefabs';
+import { INSTANCE_OVERRIDES, PRESET_MODEL_ID, builtInComponent, builtInComponents, cloneRules, makeVariant, modelFromBlock } from './components';
 import { type MenuScreen, normalizeMenu } from './menu';
 import { type SplashScreen, normalizeSplash } from './splash';
 import { type LevelLook, normalizeLook } from './look';
-import { PROP_KINDS, type PropKind, RETIRED_PROP_IDS, builtInPropModels, createPropModel, propModelId } from './props';
+import { PROP_KINDS, type PropKind, RETIRED_PROP_IDS, createPropModel, propModelId } from './props';
 import { SOUND_IDS, type SoundAsset, builtInSound, normalizeSounds } from './sounds';
 import {
   FACE_KEYS,
@@ -199,6 +199,44 @@ export interface ModelCube {
   smooth?: boolean;
 }
 
+/** How the faces of a model take their picture from its texture. */
+export type ModelMapping = 'uv' | 'tile';
+
+/** What a tile-mapped model (and the tint of any model) looks like. */
+export interface ModelLook {
+  /** The tile of the model's texture that every face repeats, once per meter. Null: a plain color. */
+  tile: { col: number; row: number } | null;
+  /** Color the picture is multiplied with; '#ffffff' = none. */
+  tint: string;
+  /** 1 = solid; lower = see-through (glass, water). Tile-mapped models only. */
+  opacity?: number;
+  /** A body of water: the player swims in it. Tile-mapped models only. */
+  liquid?: boolean;
+  /** Drawn from both sides. Tile-mapped models only (a UV-mapped model is always drawn from both). */
+  doubleSided: boolean;
+}
+
+/** What a placement of a model does until it says otherwise (see components.ts). */
+export interface ModelDefaults {
+  rules: Rule[];
+  collide: boolean;
+  animation: string | null;
+  animationSpeed: number;
+  /** The size a new placement starts at (the trophy is bigger than a coin). */
+  scale?: Vec3;
+}
+
+/** A component placed inside another one (nested components). */
+export interface ModelPart {
+  id: string;
+  name: string;
+  /** The component placed here. It must use the same texture and mapping as the one that holds it. */
+  modelId: string;
+  position: Vec3;
+  rotation: Vec3;
+  scale: Vec3;
+}
+
 export interface Model {
   id: string;
   name: string;
@@ -208,6 +246,19 @@ export interface Model {
   /** Skeleton (empty for a plain static model) and its animations. */
   bones: Bone[];
   clips: AnimationClip[];
+  /**
+   * A component (a master): it is placed from the Assets as linked instances that follow every change of it.
+   * A model that is not one is an ordinary object that belongs to one place in the level.
+   */
+  component?: boolean;
+  /** 'uv': every face has its own part of the texture (the default). 'tile': one tile repeated over every face. */
+  mapping?: ModelMapping;
+  look?: ModelLook;
+  defaults?: ModelDefaults;
+  /** A variant: its shapes, rig and animations are those of this component (its own look and behavior on top). */
+  variantOf?: string;
+  /** Components placed inside this one. */
+  parts?: ModelPart[];
 }
 
 // ---------------------------------------------------------------- level
@@ -235,8 +286,6 @@ export interface LevelBlock {
   collide: boolean;
   /** Game logic of this object: what happens when the player touches it, and so on. */
   rules: Rule[];
-  /** The asset (prefab) it was placed from, so it can be updated from it. */
-  prefab?: string;
 }
 
 export interface LevelModelInstance {
@@ -252,24 +301,21 @@ export interface LevelModelInstance {
   animationSpeed: number;
   collide: boolean;
   rules: Rule[];
-  /** The asset (prefab) it was placed from. */
-  prefab?: string;
+  /**
+   * Of an instance of a component: the placement it was made from (purple, filled). Its shape can be edited in
+   * place; the other instances only follow it.
+   */
+  master?: boolean;
+  /** Which of `rules`, `collide` and `animation` this instance sets itself instead of following its component. */
+  overrides?: InstanceOverride[];
+  /** A color this instance is multiplied with, on top of its component's. */
+  tint?: string;
 }
+
+/** What an instance of a component may set by itself instead of following the component. */
+export type InstanceOverride = 'rules' | 'collide' | 'animation';
 
 export type LevelObject = LevelBlock | LevelModelInstance;
-
-/**
- * A game object kept as an asset: a coin, a door, a moving platform or one of your own. Placing it makes
- * an ordinary level object. The built-in ones (`base` set) are in every project and can be edited.
- */
-export interface Prefab {
-  id: string;
-  name: string;
-  /** The built-in game object this one started as (it also brings the variables and sounds it needs). */
-  base: PresetKind | null;
-  /** The template, as it is placed. Its position is not used. */
-  object: LevelObject;
-}
 
 /** The sky color of a level unless it picks another. */
 export const DEFAULT_SKY = '#8fc0ee';
@@ -300,8 +346,6 @@ export interface Project {
   sounds: SoundAsset[];
   /** The levels of the game, played in this order; there is always at least one. */
   levels: LevelData[];
-  /** Game objects kept as assets: the built-in ones (always there) and your own. */
-  prefabs: Prefab[];
   /** Set in an exported game: the editor-only parts were left out, and must not be brought back. */
   exported?: boolean;
 }
@@ -415,6 +459,12 @@ export function cloneModel(model: Model): Model {
       pivot: [...b.pivot],
     })),
     clips: model.clips.map((c) => structuredClone(c)),
+    ...(model.component ? { component: true } : {}),
+    ...(model.mapping ? { mapping: model.mapping } : {}),
+    ...(model.look ? { look: structuredClone(model.look) } : {}),
+    ...(model.defaults ? { defaults: { ...structuredClone(model.defaults), rules: cloneRules(model.defaults.rules, newId) } } : {}),
+    ...(model.variantOf ? { variantOf: model.variantOf } : {}),
+    ...(model.parts ? { parts: model.parts.map((p) => ({ ...structuredClone(p), id: newId() })) } : {}),
   };
 }
 
@@ -520,7 +570,7 @@ export function normalizeModel(raw: Partial<Model>): Model {
   // a parent or a cube that points at a missing bone falls back to "none"
   for (const b of bones) if (b.parent && !seen.has(b.parent)) b.parent = null;
   for (const c of cubes) if (c.bone && !seen.has(c.bone)) c.bone = null;
-  return {
+  const out: Model = {
     id: raw.id ?? newId(),
     name: raw.name ?? 'Model',
     texture: typeof raw.texture === 'string' ? raw.texture : null,
@@ -528,6 +578,65 @@ export function normalizeModel(raw: Partial<Model>): Model {
     bones,
     clips: Array.isArray(raw.clips) ? raw.clips.map((c) => normalizeClip(c)) : [],
   };
+  if (raw.component === true) out.component = true;
+  if (raw.mapping === 'tile') out.mapping = 'tile';
+  const look = normalizeLookOfModel(raw.look);
+  if (look) out.look = look;
+  const defaults = normalizeDefaultsOfModel(raw.defaults);
+  if (defaults) out.defaults = defaults;
+  if (typeof raw.variantOf === 'string' && raw.variantOf) out.variantOf = raw.variantOf;
+  const parts = normalizePartsOfModel(raw.parts);
+  if (parts.length > 0) out.parts = parts;
+  return out;
+}
+
+function normalizeLookOfModel(raw: unknown): ModelLook | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const l = raw as Partial<ModelLook>;
+  const tile =
+    l.tile && typeof l.tile.col === 'number' && typeof l.tile.row === 'number'
+      ? { col: Math.max(0, Math.floor(l.tile.col)), row: Math.max(0, Math.floor(l.tile.row)) }
+      : null;
+  return {
+    tile,
+    tint: typeof l.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(l.tint) ? l.tint : '#ffffff',
+    ...(typeof l.opacity === 'number' && l.opacity < 1 ? { opacity: Math.max(0.05, l.opacity) } : {}),
+    ...(l.liquid === true ? { liquid: true } : {}),
+    doubleSided: l.doubleSided !== false,
+  };
+}
+
+function normalizeDefaultsOfModel(raw: unknown): ModelDefaults | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const d = raw as Partial<ModelDefaults>;
+  return {
+    rules: normalizeRules(d.rules, newId),
+    collide: d.collide !== false,
+    animation: typeof d.animation === 'string' && d.animation ? d.animation : null,
+    animationSpeed: typeof d.animationSpeed === 'number' && d.animationSpeed > 0 ? d.animationSpeed : 1,
+    ...(Array.isArray(d.scale) ? { scale: vec3(d.scale, [1, 1, 1]) } : {}),
+  };
+}
+
+function normalizePartsOfModel(raw: unknown): ModelPart[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ModelPart[] = [];
+  const seen = new Set<string>();
+  for (const p of raw as Partial<ModelPart>[]) {
+    if (!p || typeof p.modelId !== 'string' || !p.modelId) continue;
+    let id = typeof p.id === 'string' && p.id ? p.id : newId();
+    if (seen.has(id)) id = newId();
+    seen.add(id);
+    out.push({
+      id,
+      name: typeof p.name === 'string' && p.name ? p.name : 'Part',
+      modelId: p.modelId,
+      position: vec3(p.position, [0, 0, 0]),
+      rotation: vec3(p.rotation, [0, 0, 0]),
+      scale: vec3(p.scale, [1, 1, 1]),
+    });
+  }
+  return out;
 }
 
 /**
@@ -655,8 +764,9 @@ export function createModelInstance(model: Model, position: Vec3): LevelModelIns
  * 14: the built-in models were redrawn as cubes and quads only (the Hytale modeling guide); the characters too.
  * 15: a new project is blank; the pickups (coin, key, apple, flag, trophy) are in Models next to the characters.
  * 16: the player has a footstep sound; the built-in one is added to older projects.
+ * 17: game objects are components (see components.ts): the assets (prefabs) became models, with a behavior of their own.
  */
-export const PROJECT_VERSION = 16;
+export const PROJECT_VERSION = 17;
 
 export function createDefaultProject(): Project {
   return {
@@ -664,20 +774,18 @@ export function createDefaultProject(): Project {
     settings: defaultSettings(),
     player: defaultPlayer(),
     textures: [],
-    // only what the game objects are made of: the two humanoids, the pickups (coin, key, apple, flag, trophy) and the
-    // Slime and Villager, so each game object has its model to look at and edit. Nothing else is built in.
+    // the two characters and the built-in game objects as components (coin, key, apple, checkpoint, goal, Slime,
+    // Villager, door, hazard, exit, moving platform, sign, water): the pieces to build a game from, to look at and edit
     models: [
-      createHumanoidModel(newId),
-      createHumanoidModel(newId, HUMANOID_FEMALE_ID),
-      ...(Object.keys(ITEM_MODEL_IDS) as ItemKind[]).map((kind) => createItemModel(kind, newId)),
-      ...builtInPropModels(newId),
+      { ...createHumanoidModel(newId), component: true },
+      { ...createHumanoidModel(newId, HUMANOID_FEMALE_ID), component: true },
+      ...builtInComponents(newId),
     ],
     variables: [],
     sounds: Object.values(SOUND_IDS)
       .map((id) => builtInSound(id))
       .filter((s): s is SoundAsset => s !== null),
     levels: [createLevelData('Level 1', emptyLevelObjects())],
-    prefabs: builtInPrefabs(newId),
   };
 }
 
@@ -687,6 +795,8 @@ export function createDefaultProject(): Project {
  */
 export function builtInModelById(id: string): Model | null {
   if (HUMANOID_IDS.includes(id)) return createHumanoidModel(newId, id);
+  const preset = PRESETS.find((p) => PRESET_MODEL_ID[p.kind] === id);
+  if (preset) return builtInComponent(preset.kind, newId);
   for (const kind of Object.keys(ITEM_MODEL_IDS) as ItemKind[]) {
     if (ITEM_MODEL_IDS[kind] === id) return createItemModel(kind, newId);
   }
@@ -704,26 +814,23 @@ export function emptyLevelObjects(): LevelObject[] {
   return [block('Ground', [0, -0.5, 0], [30, 1, 30], [3, 16])];
 }
 
-/**
- * Make sure the project has what a preset needs: its variables and, for pickups, its model. Returns the
- * id of the model to use (null for presets that are plain blocks).
- */
-export function ensurePresetAssets(project: Project, kind: PresetKind): string | null {
+/** Make sure the project has the variables and the sounds the rules of a preset use. */
+export function ensurePresetSupport(project: Project, kind: PresetKind): void {
   project.variables.push(...missingVariables(project.variables, presetVariables(kind), newId));
   for (const id of presetSounds(kind)) {
     const sound = builtInSound(id);
     if (sound && !project.sounds.some((s) => s.id === id)) project.sounds.push(sound);
   }
-  const prop = PRESET_PROP[kind];
-  if (prop) {
-    const pid = propModelId(prop);
-    if (!project.models.some((m) => m.id === pid)) project.models.push(createPropModel(prop, newId));
-    return pid;
-  }
-  const itemKind = PRESET_ITEM[kind];
-  if (!itemKind) return null;
-  const id = ITEM_MODEL_IDS[itemKind];
-  if (!project.models.some((m) => m.id === id)) project.models.push(createItemModel(itemKind, newId));
+}
+
+/**
+ * Make sure the project has what a built-in game object needs: its variables, its sounds and its component (the
+ * model it is made of, with its default behavior). Returns the id of that model.
+ */
+export function ensurePresetAssets(project: Project, kind: PresetKind): string {
+  ensurePresetSupport(project, kind);
+  const id = PRESET_MODEL_ID[kind];
+  if (!project.models.some((m) => m.id === id)) project.models.push(builtInComponent(kind, newId));
   return id;
 }
 
@@ -745,7 +852,11 @@ export function normalizeObject(o: Partial<LevelObject> & { kind?: string; size?
       animationSpeed: typeof m.animationSpeed === 'number' && m.animationSpeed > 0 ? m.animationSpeed : 1,
       collide: m.collide ?? true,
       rules: normalizeRules(m.rules, newId),
-      ...(typeof m.prefab === 'string' && m.prefab ? { prefab: m.prefab } : {}),
+      ...(m.master === true ? { master: true } : {}),
+      ...(Array.isArray(m.overrides) && m.overrides.some((k) => INSTANCE_OVERRIDES.includes(k))
+        ? { overrides: INSTANCE_OVERRIDES.filter((k) => (m.overrides as string[]).includes(k)) }
+        : {}),
+      ...(typeof m.tint === 'string' && /^#[0-9a-fA-F]{6}$/.test(m.tint) && m.tint.toLowerCase() !== '#ffffff' ? { tint: m.tint } : {}),
     };
   }
   const b = o as Partial<LevelBlock> & { size?: unknown; offsets?: unknown };
@@ -768,7 +879,6 @@ export function normalizeObject(o: Partial<LevelObject> & { kind?: string; size?
     ...(b.liquid === true ? { liquid: true } : {}),
     collide: b.collide ?? true,
     rules: normalizeRules(b.rules, newId),
-    ...(typeof b.prefab === 'string' && b.prefab ? { prefab: b.prefab } : {}),
   };
 }
 
@@ -949,43 +1059,76 @@ export function normalizeProject(raw: unknown): Project {
   if (menu) settings.menu = menu;
   else delete settings.menu;
   const exported = r.exported === true;
-  const prefabs = exported ? [] : normalizePrefabs(r.prefabs);
-  if (rawVersion < 7) dropRetiredProps(models, levels, prefabs, player);
-  // a link to an asset that is gone is just forgotten
-  const prefabIds = new Set(prefabs.map((p) => p.id));
-  for (const l of levels) for (const o of l.objects) if (o.prefab && !prefabIds.has(o.prefab)) delete o.prefab;
-  return { version: PROJECT_VERSION, settings, player, textures, models, variables, sounds, levels, prefabs, ...(exported ? { exported } : {}) };
+  if (rawVersion < 7) dropRetiredProps(models, levels, player);
+  // version 17: the game objects (assets) are components, and a model that is placed is one too
+  if (rawVersion < 17 && !exported) migrateToComponents((r as { prefabs?: unknown }).prefabs, models, levels);
+  return { version: PROJECT_VERSION, settings, player, textures, models, variables, sounds, levels, ...(exported ? { exported } : {}) };
 }
 
-/** The prefab list of a raw project: its own assets, and every built-in one (added when missing). */
-export function normalizePrefabs(raw: unknown): Prefab[] {
-  const out: Prefab[] = [];
-  const seen = new Set<string>();
+/**
+ * Projects before version 17 kept game objects as assets (prefabs), apart from the models. Now both are components:
+ * a model asset becomes a variant of its model (the built-in ones set the behavior of the model itself), a block
+ * asset a one-shape component, and every model that is placed or built in a component. Objects that were placed
+ * keep what they have: nothing in a level changes.
+ */
+function migrateToComponents(rawPrefabs: unknown, models: Model[], levels: LevelData[]): void {
   const kinds = new Set<string>(PRESETS.map((p) => p.kind));
-  for (const p of Array.isArray(raw) ? (raw as Partial<Prefab>[]) : []) {
-    if (!p || typeof p.id !== 'string' || !p.id || seen.has(p.id) || !p.object || typeof p.object !== 'object') continue;
+  const find = (id: string) => models.find((m) => m.id === id);
+  for (const p of Array.isArray(rawPrefabs) ? (rawPrefabs as { id?: unknown; name?: unknown; base?: unknown; object?: unknown }[]) : []) {
+    if (!p || typeof p.id !== 'string' || !p.object || typeof p.object !== 'object') continue;
     const kind = (p.object as { kind?: unknown }).kind;
     if (kind !== 'block' && kind !== 'model') continue;
-    seen.add(p.id);
     const object = normalizeObject(p.object as Partial<LevelObject>);
-    object.position = [0, 0, 0];
-    delete object.prefab;
-    out.push({
-      id: p.id,
-      name: typeof p.name === 'string' && p.name.trim() ? p.name : object.name,
-      base: typeof p.base === 'string' && kinds.has(p.base) ? (p.base as PresetKind) : null,
-      object,
-    });
+    const base = typeof p.base === 'string' && kinds.has(p.base) ? (p.base as PresetKind) : null;
+    const name = typeof p.name === 'string' && p.name.trim() ? p.name : object.name;
+    if (object.kind === 'block') {
+      const id = base ? PRESET_MODEL_ID[base] : newId();
+      if (find(id)) continue;
+      const m = modelFromBlock(object, newId, id);
+      m.name = name;
+      models.push(m);
+      continue;
+    }
+    const model = find(object.modelId);
+    const defaults: ModelDefaults = {
+      rules: cloneRules(object.rules, newId),
+      collide: object.collide,
+      animation: object.animation,
+      animationSpeed: object.animationSpeed,
+      ...(object.scale.some((n) => n !== 1) ? { scale: [...object.scale] as Vec3 } : {}),
+    };
+    if (base && PRESET_MODEL_ID[base] === object.modelId) {
+      // a built-in game object: what it was changed to is the behavior of its model now
+      const target = model ?? builtInComponent(base, newId);
+      if (!model) models.push(target);
+      target.component = true;
+      target.defaults = defaults;
+    } else if (model) {
+      const v = makeVariant(model, newId, name);
+      v.defaults = defaults;
+      models.push(v);
+    }
   }
-  for (const builtIn of builtInPrefabs(newId)) if (!seen.has(builtIn.id)) out.push(builtIn);
-  return out;
+  // the built-in game objects that are still missing
+  for (const preset of PRESETS) {
+    if (!find(PRESET_MODEL_ID[preset.kind])) models.push(builtInComponent(preset.kind, newId));
+  }
+  // a model that is placed (or is one of the characters) is a master; its instances keep their own behavior
+  const placed = new Set<string>();
+  for (const l of levels) {
+    for (const o of l.objects) {
+      if (o.kind !== 'model') continue;
+      placed.add(o.modelId);
+      o.overrides = [...INSTANCE_OVERRIDES];
+    }
+  }
+  for (const m of models) if (placed.has(m.id) || HUMANOID_IDS.includes(m.id)) m.component = true;
 }
 
 /** Remove the retired prop models a project does not use anywhere (a placed one is the user's choice). */
-function dropRetiredProps(models: Model[], levels: LevelData[], prefabs: Prefab[], player: PlayerSettings): void {
+function dropRetiredProps(models: Model[], levels: LevelData[], player: PlayerSettings): void {
   const used = new Set<string>();
   for (const l of levels) for (const o of l.objects) if (o.kind === 'model') used.add(o.modelId);
-  for (const p of prefabs) if (p.object.kind === 'model') used.add(p.object.modelId);
   if (player.modelId) used.add(player.modelId);
   for (const a of player.attachments) used.add(a.modelId);
   const retired = new Set(RETIRED_PROP_IDS);
