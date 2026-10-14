@@ -2,7 +2,7 @@ import './editor/styles.css';
 import { canonicalJson } from './core/projectFile';
 import { kvGet, kvSet } from './core/storage';
 import { type Project, createDefaultProject, normalizeProject } from './core/types';
-import { EditorApp } from './editor/app';
+import { EditorApp, WELCOME_KEY } from './editor/app';
 import { FileSession } from './editor/fileSession';
 import { Store } from './editor/store';
 import { TextureLibrary } from './runtime/textures';
@@ -37,6 +37,10 @@ async function main(): Promise<void> {
     e.preventDefault();
     e.returnValue = '';
   });
+  // the welcome screen: new empty project, open a file, or go on with the last session (can be switched off in it)
+  app.showWelcomeAtStartup = (await kvGet<boolean>(WELCOME_KEY)) !== false;
+  if (app.showWelcomeAtStartup) app.showWelcome(!!saved);
+
   // Backup autosave (debounced) to IndexedDB on any change except selection. The project file itself
   // is only written when the user presses Save (see FileSession).
   let timer: number | undefined;

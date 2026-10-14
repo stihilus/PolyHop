@@ -29,6 +29,10 @@ src/editor/    editor UI: store, level viewport, model editor, paint editor, giz
 src/editor/panels/   the right-hand properties panels and the Assets list (plain functions that get the
                editor through a small `PanelHost`), kept out of `app.ts`
 tests/         vitest unit tests (player controller, pixels, UVs, shapes, geometry, logic, export)
+assets/brand/  the PolyHop logos (the mascot, and the mascot with the lettering) as black SVG files; the editor draws
+               them in the accent color (welcome screen, top bar)
+public/        what is served as it is: the exported player, and the icons (`favicon.svg`, `favicon-32.png`,
+               `apple-touch-icon.png`, made from the logo by `python3 tools/make-icons.py`)
 ```
 
 `runtime/` never imports from `editor/`, so the exported game ships without any editor code.
@@ -320,10 +324,15 @@ into the file too, so it looks the same on another machine.
 | Save as… (Ctrl/Cmd+Shift+S) | Always asks for a new file. |
 | Open project… | Loads a saved file and keeps Save pointed at it. |
 | New project | Starts a blank project (see below) and forgets the file. |
+| Welcome screen… | Shows the welcome screen again (also the PolyHop logo in the top bar). |
 
-**Starting.** The editor always opens a **blank project** (the first time, and with **New project**): one level
-with a flat ground to stand on, the theme as the game's music and the 13 game objects (Assets > Game objects). Its
-Models are the two humanoids, the five pickups, the Slime and the Villager, and nothing else.
+**Starting.** PolyHop opens with a **welcome screen** (the logo and a few ways to start, like the splash of Blender):
+**New empty project**, **Open project…**, and **Continue** with the project of your last session (when there is one).
+Esc or a click outside keeps what is open. *Show this screen when PolyHop starts* turns it off; it comes back from
+the PolyHop logo in the top bar or **File > Welcome screen…**. A new project is a **blank** one: one level with a flat
+ground to stand on, the theme as the game's music and the 13 game objects (Assets > Game objects). Its Models are the
+two humanoids, the five pickups, the Slime and the Villager, and nothing else. If the project that is open has changes
+that are not saved to a file, starting another one asks first.
 
 The top bar shows the file name and `unsaved changes` when the project differs from the file. The
 project is also autosaved in the browser as a backup, which only matters if you forget to Save.

@@ -155,12 +155,15 @@ input[type='range'] {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-right: 8px;
+  padding: 0;
+  font: inherit;
   font-weight: 700;
   letter-spacing: 0.04em;
-  margin-right: 8px;
-}
-.brand-mark {
-  color: var(--accent);
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
 }
 .play-btn {
   min-width: 110px;
@@ -1864,6 +1867,159 @@ input[type='search']:focus {
   max-height: 100%;
   object-fit: contain;
   image-rendering: pixelated;
+}
+
+/* ---------------------------------------------------------------- brand and welcome screen */
+.brand-art {
+  display: inline-flex;
+  color: var(--accent);
+}
+.brand-art svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.brand:hover .brand-art {
+  color: #ffc460;
+}
+.brand .brand-art {
+  width: 24px;
+  height: 23px;
+}
+.welcome {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  width: min(840px, calc(100vw - 32px));
+  padding: 0;
+  overflow: hidden;
+}
+.welcome-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+}
+.welcome-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 360px;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 50% 38%, rgb(255 178 62 / 0.16), transparent 62%),
+    repeating-linear-gradient(0deg, transparent 0 31px, rgb(255 255 255 / 0.035) 31px 32px),
+    repeating-linear-gradient(90deg, transparent 0 31px, rgb(255 255 255 / 0.035) 31px 32px),
+    #101217;
+  border-right: 1px solid var(--border);
+}
+.welcome-logotype {
+  width: min(260px, 100%);
+  aspect-ratio: 363 / 419;
+  filter: drop-shadow(5px 5px 0 var(--accent-dim));
+}
+.welcome-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 28px 24px 18px;
+}
+.welcome-heading {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+}
+.welcome-tagline {
+  margin: 0;
+  line-height: 1.5;
+}
+.welcome-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.welcome-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
+}
+.welcome-choice:hover,
+.welcome-choice:focus-visible {
+  border-color: var(--accent);
+  background: #282d39;
+}
+.welcome-choice.primary {
+  border-color: var(--accent);
+  background: #2d2616;
+}
+.welcome-choice.primary:hover,
+.welcome-choice.primary:focus-visible {
+  background: #3a2f17;
+}
+.welcome-choice-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+.welcome-choice.primary .welcome-choice-title {
+  color: var(--accent);
+}
+.welcome-choice-text {
+  color: var(--muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.welcome-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: auto;
+  padding-top: 14px;
+  font-size: 11px;
+}
+.welcome-startup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.welcome-link {
+  text-decoration: none;
+}
+.welcome-link:hover {
+  color: var(--accent);
+}
+@media (max-width: 640px) {
+  .welcome {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .welcome-art {
+    min-height: 0;
+    padding: 20px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .welcome-logotype {
+    width: min(150px, 100%);
+  }
+  .welcome-body {
+    padding: 18px 16px 14px;
+  }
 }
 
 /* ---------------------------------------------------------------- keyboard shortcut sheet */

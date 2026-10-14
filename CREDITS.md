@@ -24,7 +24,8 @@ the scripts in `tools/` (and by the generators in `src/core/sfx.ts` and `src/cor
 attribute for them.
 
 `assets/textures/Textures-16.png` and `assets/textures/Seamless-16.png` are 16 × 16 px tile sets supplied by the
-project author.
+project author, and so are the logos in `assets/brand` (the mascot and the PolyHop lettering). The icons in
+`public/` are drawn from the logo by `tools/make-icons.py`.
 
 ## License of PolyHop itself
 

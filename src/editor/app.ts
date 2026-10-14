@@ -30,6 +30,9 @@ import { renameInline } from './ui/rename';
 import { DEFAULT_EXPORT_OPTIONS, exportGame } from './exportGame';
 import { openExportDialog } from './ui/exportDialog';
 import { shortcutSheet } from './ui/shortcutSheet';
+import { brandElement } from './ui/brand';
+import { openWelcomeDialog } from './ui/welcomeDialog';
+import { kvSet } from '../core/storage';
 import { makeSplitter } from './ui/splitter';
 import { AssetsPanel } from './panels/assetsPanel';
 import type { LeftTab, Mode, PanelHost } from './panels/host';
@@ -40,6 +43,8 @@ import { buildLevelPanel, buildPaintPanel, buildSculptPanel } from './panels/too
 import { Viewport } from './viewport';
 
 export const APP_NAME = 'PolyHop';
+/** The key of the "show the welcome screen at startup" choice in the browser's storage. */
+export const WELCOME_KEY = 'welcome-at-startup';
 
 export class EditorApp {
   /** Exposed for dev-time debugging (window.__app). */
@@ -175,7 +180,39 @@ export class EditorApp {
   }
 
   private confirmDiscard(question: string): boolean {
-    return !this.files.state().dirty || confirm(`${question}\n\nThe current project has changes that are not saved to a file.`);
+    return !this.files.hasUnsavedChanges() || confirm(`${question}\n\nThe current project has changes that are not saved to a file.`);
+  }
+
+  private welcomeClose: (() => void) | null = null;
+  private openInput: HTMLInputElement | null = null;
+  /** Show the welcome screen again at every start (kept in the browser's storage, on by default). */
+  showWelcomeAtStartup = true;
+
+  /**
+   * The welcome screen: start a new empty project, open a file, or go on with the project of the last session
+   * (`restored`: the editor loaded one from the browser's backup).
+   */
+  showWelcome(restored: boolean): void {
+    if (this.welcomeClose) return;
+    const project = this.store.project;
+    const objects = project.levels.reduce((n, l) => n + l.objects.length, 0);
+    const levels = `${project.levels.length} level${project.levels.length === 1 ? '' : 's'}`;
+    this.welcomeClose = openWelcomeDialog({
+      continueName: restored ? project.settings.name : null,
+      continueInfo: `${levels}, ${objects} object${objects === 1 ? '' : 's'} · from your last session`,
+      showAtStartup: this.showWelcomeAtStartup,
+      onNew: () => void this.newProject(),
+      onOpen: () => {
+        if (this.openInput) void this.openProject(this.openInput);
+      },
+      onShowAtStartupChange: (value) => {
+        this.showWelcomeAtStartup = value;
+        void kvSet(WELCOME_KEY, value);
+      },
+      onClose: () => {
+        this.welcomeClose = null;
+      },
+    });
   }
 
   /** A new project is the blank one: a flat ground, the characters, and nothing else. */
@@ -412,6 +449,7 @@ export class EditorApp {
       if (file) await this.importRig(file);
     });
 
+    this.openInput = fileInput;
     const closeMenu = () => fileMenu.classList.remove('open');
     const item = (text: string, fn: () => void, disabled = false) =>
       el('button', {
@@ -430,6 +468,7 @@ export class EditorApp {
       item('Save as…  (Ctrl/Cmd+Shift+S)', () => void this.saveProject(true)),
       item('Import rig model (.json)…', () => rigInput.click()),
       item('Export game (HTML5 .zip)…', () => this.openExport()),
+      item('Welcome screen…', () => this.showWelcome(false)),
     );
     fileMenu.querySelector('button')!.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -460,7 +499,12 @@ export class EditorApp {
     return el(
       'header',
       { class: 'topbar' },
-      el('div', { class: 'brand' }, el('span', { class: 'brand-mark', text: '◆' }), el('span', { text: APP_NAME })),
+      el(
+        'button',
+        { class: 'brand', title: 'Welcome screen', 'aria-label': `${APP_NAME}: welcome screen`, onclick: () => this.showWelcome(false) },
+        brandElement('mark'),
+        el('span', { text: APP_NAME }),
+      ),
       fileMenu,
       this.saveBtn,
       el('button', { class: 'btn', text: 'Project Settings', onclick: () => openSettingsDialog(this.store) }),
@@ -684,6 +728,8 @@ export class EditorApp {
   }
 
   private onKey(e: KeyboardEvent): void {
+    // the welcome screen is a dialog: the editor behind it does not take keys
+    if (this.welcomeClose) return;
     // Save works in every mode, also while typing in a field
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
       e.preventDefault();
