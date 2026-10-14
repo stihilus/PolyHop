@@ -28,6 +28,7 @@ import { showSplash } from '../../runtime/splash';
 import type { Store } from '../store';
 import { el } from './dom';
 import { appAlert } from './dialogs';
+import { buildVariablesPanel } from './logicPanels';
 import { type Field, buildForm } from './form';
 
 export { keyLabel };
@@ -109,9 +110,10 @@ async function readPicture(file: File, maxWidth: number, maxHeight: number, maxC
   return out;
 }
 
-type TabId = 'general' | 'menu' | 'splash' | 'controls' | 'sound';
+type TabId = 'general' | 'variables' | 'menu' | 'splash' | 'controls' | 'sound';
 const TABS: [TabId, string][] = [
   ['general', 'General'],
+  ['variables', 'Variables'],
   ['menu', 'Menu'],
   ['splash', 'Splash'],
   ['controls', 'Controls'],
@@ -449,7 +451,35 @@ export function openSettingsDialog(store: Store): void {
     { class: 'settings-panel' },
     buildForm(soundFields(store), settings as unknown as Record<string, unknown>, () => store.settingsChanged()),
   );
-  const panels: Record<TabId, HTMLElement> = { general: generalPanel, menu: menuBox, splash: splashPanel, controls: controlsPanel, sound: soundPanel };
+  // the numbers of the game (coins, keys, health ...): they live in the project settings, not in the side bar
+  const variablesPanel = el('div', { class: 'settings-panel' });
+  const renderVariables = () => {
+    variablesPanel.replaceChildren(
+      buildVariablesPanel({
+        variables: () => store.project.variables,
+        add: () => {
+          store.addVariable();
+          renderVariables();
+        },
+        remove: (id) => {
+          store.removeVariable(id);
+          renderVariables();
+        },
+        rename: (id, name) => store.renameVariable(id, name),
+        // a value changed: the fields stay as they are (drawing them again would take the focus)
+        changed: () => store.variablesChanged(),
+      }),
+    );
+  };
+  renderVariables();
+  const panels: Record<TabId, HTMLElement> = {
+    general: generalPanel,
+    variables: variablesPanel,
+    menu: menuBox,
+    splash: splashPanel,
+    controls: controlsPanel,
+    sound: soundPanel,
+  };
   const tabBar = el('div', { class: 'tabs modal-tabs' });
   const tabButtons = new Map<TabId, HTMLElement>();
   const showTab = (id: TabId) => {
@@ -468,6 +498,7 @@ export function openSettingsDialog(store: Store): void {
     el('div', { class: 'modal-title' }, el('span', { text: 'Project Settings' }), el('button', { class: 'icon-btn', text: '✕', onclick: close })),
     tabBar,
     generalPanel,
+    variablesPanel,
     menuBox,
     splashPanel,
     controlsPanel,
