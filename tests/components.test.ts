@@ -222,6 +222,25 @@ describe('making a component', () => {
     expect(store.getObject(b.id)!.kind).toBe('block');
   });
 
+  it('a block can be opened in Models as an ordinary object made of a model, which is not a component', () => {
+    const project = createDefaultProject();
+    const b = block();
+    project.levels[0]!.objects.push(b);
+    const store = new Store(project);
+    const id = store.makeObjectModel(b.id)!;
+    const model = store.getModel(id)!;
+    expect(model.component).toBeUndefined();
+    expect(model.mapping).toBe('tile');
+    const o = store.getObject(b.id) as LevelModelInstance;
+    expect(o.kind).toBe('model');
+    expect(o.master).toBeUndefined();
+    expect(o.position).toEqual([2, 1, 3]);
+    // asking again for a placement of a model gives its model
+    expect(store.makeObjectModel(b.id)).toBe(id);
+    store.undoLevel();
+    expect(store.getObject(b.id)!.kind).toBe('block');
+  });
+
   it('a sculpted terrain cannot be a component', () => {
     const project = createDefaultProject();
     const b = block();

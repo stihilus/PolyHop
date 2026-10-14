@@ -566,6 +566,24 @@ export class Store {
     return model.id;
   }
 
+  /**
+   * A block becomes an ordinary object made of a model (not a component): it can then be opened in Models to add shapes
+   * to it. It stays where it is. Returns the id of the model, or null for a terrain.
+   */
+  makeObjectModel(objectId: string): string | null {
+    const obj = this.getObject(objectId);
+    if (!obj) return null;
+    if (obj.kind === 'model') return obj.modelId;
+    if (obj.terrain) return null;
+    const { model, instance } = componentFromBlock(obj, newId, false);
+    this.project.models.push(model);
+    this.objects[this.objects.indexOf(obj)] = instance;
+    this.emit({ type: 'model-added', id: model.id });
+    this.emit({ type: 'object-changed', id: instance.id });
+    this.commitLevel('object-to-model');
+    return model.id;
+  }
+
   /** A model is a component (or not any more). Placed instances keep what they have. */
   setComponent(modelId: string, on: boolean): void {
     const m = this.getModel(modelId);

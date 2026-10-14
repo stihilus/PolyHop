@@ -41,6 +41,8 @@ export interface PanelHost {
   placeModel(id: string, position: Vec3): void;
   /** The object (a block or a model placement) becomes a component and stays where it is as its master. */
   makeComponent(objectId: string): void;
+  /** Open the object in Models (a block first becomes an ordinary object made of a model). */
+  editInModels(objectId: string): void;
   setComponent(modelId: string, on: boolean): void;
   duplicateModel(modelId: string): void;
   newModel(): void;

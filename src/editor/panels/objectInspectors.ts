@@ -110,6 +110,13 @@ export function buildBlockInspector(host: PanelHost, obj: LevelBlock): void {
       { class: 'button-stack row' },
       el('button', {
         class: 'btn',
+        text: 'Edit in Models',
+        title: 'Open it in the model editor to add more shapes to it (it stays an ordinary object)',
+        disabled: !!obj.terrain,
+        onclick: () => host.editInModels(obj.id),
+      }),
+      el('button', {
+        class: 'btn',
         text: 'Center origin',
         title: 'Move the shape’s origin to the middle of its bounds',
         onclick: () => {

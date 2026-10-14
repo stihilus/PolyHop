@@ -279,6 +279,7 @@ export class EditorApp {
       selectObject: (id) => this.store.select({ kind: 'object', id }),
       placeModel: (id, at) => this.placeModel(id, at),
       makeComponent: (id) => this.makeComponent(id),
+      editInModels: (id) => this.editInModels(id),
       setComponent: (id, on) => this.store.setComponent(id, on),
       duplicateModel: (id) => this.duplicateModel(id),
       newModel: () => this.newModel(),
@@ -693,6 +694,16 @@ export class EditorApp {
     this.refreshAssets();
     this.refreshInspector();
     this.refreshHierarchy();
+  }
+
+  /** The object is opened in Models: a block first becomes an ordinary object made of a model. */
+  private editInModels(objectId: string): void {
+    const id = this.store.makeObjectModel(objectId);
+    if (!id) {
+      this.hudTop.textContent = 'A sculpted terrain is edited with the Sculpt tool, not in Models.';
+      return;
+    }
+    this.openModel(id);
   }
 
   /** A copy of a model (its shapes, look and behavior) as another asset. */

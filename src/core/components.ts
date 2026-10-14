@@ -183,8 +183,14 @@ export function modelFromBlock(block: LevelBlock, idGen: Idgen, id = idGen()): M
  * The block becomes a component (a master): the model that replaces it, and the placement that takes its place
  * (same position and turn, flagged as the master).
  */
-export function componentFromBlock(block: LevelBlock, idGen: Idgen): { model: Model; instance: LevelModelInstance } {
+export function componentFromBlock(
+  block: LevelBlock,
+  idGen: Idgen,
+  /** false: an ordinary object made of a model (to add shapes to it in Models), not yet a component */
+  asComponent = true,
+): { model: Model; instance: LevelModelInstance } {
   const model = modelFromBlock(block, idGen);
+  if (!asComponent) delete model.component;
   const instance: LevelModelInstance = {
     id: block.id,
     name: block.name,
@@ -197,7 +203,7 @@ export function componentFromBlock(block: LevelBlock, idGen: Idgen): { model: Mo
     animationSpeed: 1,
     collide: block.collide,
     rules: block.rules,
-    master: true,
+    ...(asComponent ? { master: true } : {}),
   };
   return { model, instance };
 }

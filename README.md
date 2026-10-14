@@ -123,6 +123,7 @@ becomes a **master component** (**purple**, a filled diamond ◆) like a compone
 - **Behavior is shared too.** What a component does by default (rules, solid, animation, and the size a placement starts at) is
   edited on the master placement or in the component's properties (select it in the Assets): every instance follows,
   except what an instance sets itself (marked *set here*; **Reset to component** takes it back).
+- **Edit in Models** (on a block in the level) turns it into an ordinary object made of a model, opened in the model editor to add more shapes to it.
 - **Detach** turns an instance into an ordinary object with shapes of its own. **Not a component** makes a model ordinary again.
 - **Size of a master** (a component of one shape) resizes the component: all instances follow, and a tile keeps its size.
 - **Variants:** *Make variant* (component properties) creates a component with the shapes of the original and its own look
