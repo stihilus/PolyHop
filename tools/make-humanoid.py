@@ -10,7 +10,7 @@
   assets/textures/Character-Female-Explorer.png an adventurer: a headband, a green vest, boots
   assets/textures/Character-Female-Template.png the template of the female character
 
-The build follows a stylized game character: a big head that is nearly a cube, a short neck, a broad chest,
+The build follows a stylized game character: a head that is nearly a cube (a fifth of the body), a short neck, a broad chest,
 arms with separate hands, legs with long flat feet, and the hair as parts of its own. There is no nose in the
 geometry (the face is painted). Everything is made from the numbers below (sizes in pixels, the whole body is
 scaled to be 1 m tall before the game scales it to the player's height), so the models and the skins are always
@@ -63,7 +63,7 @@ def hair(head, long_hair):
     """The hair is a cap over the top of the head and a slab behind it (and locks at the sides when long)."""
     top = head["y"] + head["h"]
     pad = 0.7
-    cap_h = 4.8
+    cap_h = 3.8
     cap_top = top + 0.6
     cap_y = cap_top - cap_h
     w0, d0 = head_dims(head, cap_y)
@@ -72,7 +72,7 @@ def hair(head, long_hair):
 
     # the slab behind the head: a few pixels thick, 0.8 px behind the back of the head
     thick = 3.4 if not long_hair else 3.0
-    back_y = head["y"] - 2.4 if long_hair else top - 9.4
+    back_y = head["y"] - 2.4 if long_hair else top - 7.8
     back_top = top - 1.0
     wb, db = head_dims(head, back_y)
     wt, dt = head_dims(head, back_top)
@@ -87,8 +87,8 @@ def hair(head, long_hair):
         tcz=-(dt / 2) - 0.8 + thick / 2,
     )
     if long_hair:
-        lock_h = 11.5
-        ly = top - 1.5 - lock_h
+        lock_h = 9.4
+        ly = top - 1.3 - lock_h
         wl, dl = head_dims(head, ly + lock_h / 2)
         for sign, name in ((-1, "RightHairLock"), (1, "LeftHairLock")):
             parts[name] = part(ly, lock_h, 1.9, 4.8, 1.9, 4.8, cx=sign * (wl / 2 + 0.55), bcz=-1.0)
@@ -96,42 +96,43 @@ def hair(head, long_hair):
 
 
 def male_parts():
+    # a head that is about a fifth of the body and nearly a cube (a little wider than it is tall), on a sturdy body
     p = {}
-    p["Hips"] = part(22.8, 5.6, 12.2, 7.2, 11.6, 7.0)
-    p["Waist"] = part(28.4, 4.8, 11.6, 7.0, 11.8, 7.4)
-    p["Chest"] = part(33.2, 10.8, 11.8, 7.4, 14.0, 8.6)
-    p["Neck"] = part(43.6, 2.0, 4.2, 4.2, 4.0, 4.0)
-    p["Head"] = part(45.4, 16.0, 13.2, 12.6, 14.4, 13.8)
+    p["Hips"] = part(24.8, 5.6, 12.8, 7.2, 12.2, 7.0)
+    p["Waist"] = part(30.4, 5.0, 12.2, 7.0, 12.6, 7.4)
+    p["Chest"] = part(35.4, 11.4, 12.6, 7.4, 15.2, 8.6)
+    p["Neck"] = part(46.4, 1.8, 4.2, 4.2, 4.0, 4.0)
+    p["Head"] = part(48.0, 13.4, 12.4, 11.8, 14.0, 13.0)
     p.update(hair(p["Head"], long_hair=False))
-    p["RightEar"] = part(51.6, 3.6, 1.2, 3.0, cx=-7.35)
-    p["LeftEar"] = part(51.6, 3.6, 1.2, 3.0, cx=7.35)
-    p.update(both("UpperArm", 34.0, 10.0, 3.9, 4.2, 4.3, 4.7, 8.85))
-    p.update(both("Forearm", 25.4, 8.6, 3.5, 3.7, 3.9, 4.2, 8.85))
-    p.update(both("Hand", 21.6, 3.8, 3.2, 3.2, 3.7, 3.6, 8.85))
-    p.update(both("Thigh", 13.4, 9.8, 4.7, 5.2, 5.5, 5.9, 3.05))
-    p.update(both("Shin", 3.6, 9.8, 3.9, 4.2, 4.6, 4.8, 3.05))
+    p["RightEar"] = part(52.4, 3.4, 1.2, 3.0, cx=-7.1)
+    p["LeftEar"] = part(52.4, 3.4, 1.2, 3.0, cx=7.1)
+    p.update(both("UpperArm", 36.6, 10.2, 4.0, 4.4, 4.6, 4.9, 9.7))
+    p.update(both("Forearm", 28.0, 8.6, 3.6, 3.9, 4.0, 4.4, 9.7))
+    p.update(both("Hand", 24.0, 4.0, 3.3, 3.3, 3.8, 3.8, 9.7))
+    p.update(both("Thigh", 14.8, 10.6, 4.8, 5.3, 5.7, 6.1, 3.2))
+    p.update(both("Shin", 3.8, 11.0, 4.0, 4.3, 4.7, 4.9, 3.2))
     for sign, side in ((-1, "Right"), (1, "Left")):
-        p[f"{side}Foot"] = part(0.0, 3.6, 4.5, 9.6, 4.2, 6.6, cx=sign * 3.05, bcz=2.4, tcz=1.0)
+        p[f"{side}Foot"] = part(0.0, 3.8, 4.7, 10.0, 4.4, 6.8, cx=sign * 3.2, bcz=2.5, tcz=1.0)
     return p
 
 
 def female_parts():
     p = {}
-    p["Hips"] = part(22.4, 5.8, 12.6, 7.2, 10.8, 6.8)
-    p["Waist"] = part(28.2, 4.6, 10.8, 6.8, 10.2, 6.6)
-    p["Chest"] = part(32.8, 11.0, 10.4, 6.8, 12.8, 7.8)
-    p["Neck"] = part(43.4, 2.0, 3.6, 3.6, 3.4, 3.4)
-    p["Head"] = part(45.0, 15.8, 12.6, 12.0, 13.8, 13.2)
+    p["Hips"] = part(24.6, 5.8, 12.8, 7.2, 11.0, 6.8)
+    p["Waist"] = part(30.4, 4.8, 11.0, 6.8, 10.4, 6.6)
+    p["Chest"] = part(35.2, 11.2, 10.6, 6.8, 13.2, 7.8)
+    p["Neck"] = part(46.0, 1.8, 3.6, 3.6, 3.4, 3.4)
+    p["Head"] = part(47.6, 12.4, 11.4, 10.8, 12.8, 12.0)
     p.update(hair(p["Head"], long_hair=True))
-    p["RightEar"] = part(51.2, 3.4, 1.2, 2.8, cx=-7.0)
-    p["LeftEar"] = part(51.2, 3.4, 1.2, 2.8, cx=7.0)
-    p.update(both("UpperArm", 33.6, 9.8, 3.4, 3.8, 3.9, 4.3, 8.1))
-    p.update(both("Forearm", 25.4, 8.2, 3.0, 3.4, 3.4, 3.8, 8.1))
-    p.update(both("Hand", 21.7, 3.7, 2.8, 3.0, 3.3, 3.4, 8.1))
-    p.update(both("Thigh", 13.2, 9.8, 4.6, 5.0, 5.7, 5.8, 3.1))
-    p.update(both("Shin", 3.4, 9.8, 3.5, 3.9, 4.4, 4.6, 3.1))
+    p["RightEar"] = part(51.6, 3.2, 1.2, 2.8, cx=-6.5)
+    p["LeftEar"] = part(51.6, 3.2, 1.2, 2.8, cx=6.5)
+    p.update(both("UpperArm", 36.2, 10.0, 3.5, 3.9, 4.0, 4.4, 8.4))
+    p.update(both("Forearm", 27.8, 8.4, 3.1, 3.5, 3.5, 3.9, 8.4))
+    p.update(both("Hand", 23.8, 4.0, 2.9, 3.1, 3.4, 3.5, 8.4))
+    p.update(both("Thigh", 14.6, 10.6, 4.7, 5.1, 5.8, 5.9, 3.2))
+    p.update(both("Shin", 3.6, 11.0, 3.6, 4.0, 4.5, 4.7, 3.2))
     for sign, side in ((-1, "Right"), (1, "Left")):
-        p[f"{side}Foot"] = part(0.0, 3.4, 4.2, 9.0, 3.9, 6.2, cx=sign * 3.1, bcz=2.2, tcz=0.9)
+        p[f"{side}Foot"] = part(0.0, 3.6, 4.3, 9.4, 4.0, 6.4, cx=sign * 3.2, bcz=2.3, tcz=0.9)
     return p
 
 
@@ -452,7 +453,7 @@ def draw_face(sk, tone, female=False, iris=(62, 120, 212), brow=(78, 52, 34), li
     ex = [2, W - 6]  # left columns of the two eyes: 4 pixels of white each
     skin_shadow = mix(tone, (110, 50, 40), 0.3)
     skin_light = add(tone, 9)
-    row = 6 if H >= 15 else 5  # the first row of the eyes
+    row = 5  # the first row of the eyes: brows right under the fringe, then the lids, then the eyes
     # lids and brows
     for i, x0 in enumerate(ex):
         outer_left = i == 0
@@ -503,9 +504,9 @@ def draw_face(sk, tone, female=False, iris=(62, 120, 212), brow=(78, 52, 34), li
     # cheeks
     blush = mix(tone, (240, 110, 110), 0.38 if female else 0.25)
     for x in (2, 3, W - 4, W - 3):
-        sk.put("Head", "front", x, row + 5, blush)
-    # mouth
-    my = row + 6
+        sk.put("Head", "front", x, row + 4, blush)
+    # mouth (one row nearer on a head that is only 13 rows tall, so the chin keeps its row)
+    my = row + 5 if H <= 13 else row + 6
     half = 2 if not female else 1
     left = c0 - half
     right = c1 + half

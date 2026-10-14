@@ -750,8 +750,9 @@ export function defaultLevel(): LevelObject[] {
  * every project. 9: the Slime and Villager models, and a glide pose for the humanoid. 10: the models that
  * come as files (assets/models) are in every project. 11: the humanoid was rebuilt (new parts, bone names and skins).
  * 12: the humanoid has no nose and its hair is a part of its own; there is a female build as well.
+ * 13: the characters got a smaller, squarer head (a new layout, so the skins changed too).
  */
-export const PROJECT_VERSION = 12;
+export const PROJECT_VERSION = 13;
 
 export function createDefaultProject(): Project {
   return {
@@ -962,12 +963,14 @@ export function normalizeProject(raw: unknown): Project {
     const saved = models.find((m) => m.id === HUMANOID_ID);
     if (saved) refreshHumanoidLayout(saved, createHumanoidModel(newId));
   }
-  // version 11 and 12: the humanoid was rebuilt from scratch (other parts, bone names, skins; then no nose and the
-  // hair as parts of its own): a saved one is replaced, and the female build is added
-  if (rawVersion < 12) {
+  // versions 11 to 13: the humanoid was rebuilt from scratch (other parts, bone names, skins; then no nose and the hair as
+  // parts of its own; then a smaller head): a saved one is replaced by the current one, and the female build is added
+  if (rawVersion < 13) {
     const at = models.findIndex((m) => m.id === HUMANOID_ID);
     if (at >= 0) models[at] = createHumanoidModel(newId);
-    if (r.exported !== true && !models.some((m) => m.id === HUMANOID_FEMALE_ID)) models.splice(at >= 0 ? at + 1 : models.length, 0, createHumanoidModel(newId, HUMANOID_FEMALE_ID));
+    const femaleAt = models.findIndex((m) => m.id === HUMANOID_FEMALE_ID);
+    if (femaleAt >= 0) models[femaleAt] = createHumanoidModel(newId, HUMANOID_FEMALE_ID);
+    else if (rawVersion < 12 && r.exported !== true) models.splice(at >= 0 ? at + 1 : models.length, 0, createHumanoidModel(newId, HUMANOID_FEMALE_ID));
     // a skin by an old name is the same skin in the new layout
     if (player.skin && player.skin in OLD_HUMANOID_SKINS) player.skin = OLD_HUMANOID_SKINS[player.skin] ?? null;
     // the nose is gone: something worn on it sits on the head now

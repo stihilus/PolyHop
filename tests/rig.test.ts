@@ -262,12 +262,14 @@ describe.each([
     expect(extent(model.cubes.find((c) => c.name === 'HairBack')!, 2)[0]).toBeLessThan(extent(headCube, 2)[0]);
   });
 
-  it('has a big head: about a quarter of the body', () => {
+  it('has a head of about a fifth of the body, nearly a cube and not taller than it is wide', () => {
     const head = model.cubes.find((c) => c.name === 'Head')!;
-    const ys = cubeWorldPoints(head).map((p) => p[1]);
-    const height = Math.max(...ys) - Math.min(...ys);
-    expect(height).toBeGreaterThan(0.22);
-    expect(height).toBeLessThan(0.3);
+    const pts = cubeWorldPoints(head);
+    const range = (axis: 0 | 1 | 2) => Math.max(...pts.map((p) => p[axis])) - Math.min(...pts.map((p) => p[axis]));
+    const body = Math.max(...model.cubes.flatMap((c) => cubeWorldPoints(c).map((p) => p[1])));
+    expect(range(1) / body).toBeGreaterThan(0.18);
+    expect(range(1) / body).toBeLessThan(0.235);
+    expect(range(1)).toBeLessThanOrEqual(range(0) + 1e-6);
   });
 
   it('puts joints where limbs bend', () => {
@@ -483,6 +485,24 @@ describe('model data with bones', () => {
     expect(p.models.filter((m) => m.id === HUMANOID_ID)).toHaveLength(1);
     expect(p.player.attachments[0]!.bone).toBe('Head');
     expect(p.player.skin).toBe('Character-Explorer.png');
+  });
+
+  it('a project of version 12 gets the characters with the smaller head, and keeps the choice of the player', () => {
+    const male = createHumanoidModel(ids);
+    const female = createHumanoidModel(ids, HUMANOID_FEMALE_ID);
+    // what version 12 saved: the same parts, a taller head
+    const old = JSON.parse(JSON.stringify(male)) as typeof male;
+    const oldHead = old.cubes.find((c) => c.name === 'Head')!;
+    for (const v of oldHead.mesh.verts) v[1] = v[1] * 1.2;
+    const p = normalizeProject({ version: 12, player: { modelId: HUMANOID_FEMALE_ID, skin: 'Character-Female-Skin.png' }, models: [old, JSON.parse(JSON.stringify(female))] });
+    const head = p.models.find((m) => m.id === HUMANOID_ID)!.cubes.find((c) => c.name === 'Head')!;
+    expect(head.mesh.verts).toEqual(male.cubes.find((c) => c.name === 'Head')!.mesh.verts);
+    expect(p.models.filter((m) => m.id === HUMANOID_FEMALE_ID)).toHaveLength(1);
+    expect(p.player.modelId).toBe(HUMANOID_FEMALE_ID);
+    expect(p.player.skin).toBe('Character-Female-Skin.png');
+    // a project that had deleted the female build does not get it back
+    const without = normalizeProject({ version: 12, player: { modelId: HUMANOID_ID }, models: [old] });
+    expect(without.models.some((m) => m.id === HUMANOID_FEMALE_ID)).toBe(false);
   });
 
   it('can still copy the UVs of a layout onto a saved humanoid (a helper for older layouts)', () => {

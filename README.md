@@ -273,7 +273,7 @@ The player is **1.8 m tall** by default (Width 0.6 m, crouch 1.1 m, camera 6.5 m
 player's **Height**, so changing it changes both what you see and the collision shape.
 
 New projects have two low-poly characters, **Humanoid** and **Humanoid (female)**, built like the figures of
-a stylized adventure game: a big head that is nearly a cube (a quarter of the body), no nose in the geometry (the
+a stylized adventure game: a head that is nearly a cube (about a fifth of the body, a little wider than it is tall), no nose in the geometry (the
 face with its big eyes is painted), small ears, a short neck, a broad chest, arms with a separate hand, legs with
 a long flat foot. The hair is made of parts of its own (a cap over the head and a slab behind it; the female
 character also has two locks at the sides and hair down her back) that follow the head, so a skin can give the
