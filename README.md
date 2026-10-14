@@ -632,6 +632,10 @@ sound for the player's footsteps by surface.
 
 ## Decisions
 
+- No browser pop-ups: every message and question of the editor is a dialog of the editor (`src/editor/ui/dialogs.ts`:
+  `appAlert`, `appConfirm`, `appPrompt`; Enter goes on, Esc cancels, a destructive question starts on Cancel). The two
+  things only the browser can draw stay: the file pickers, and the "leave this page?" question when the page is closed
+  with work that is not saved to a file.
 - Project format is human-readable JSON; game logic is data (events → actions), not a scripting language.
   An optional script component can come later.
 - Grid snap by default with free placement available. Shapes are polygon meshes you can edit (extrude, inset, loop cut ...).

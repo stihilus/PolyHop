@@ -4,6 +4,7 @@ import { type TextureInfo, type TextureLibrary, tileSizeFromName } from '../runt
 import type { Store, StoreEvent } from './store';
 import { type AtlasLayer, type AtlasTexture, AtlasView } from './ui/atlasView';
 import { clear, el } from './ui/dom';
+import { appAlert, appConfirm } from './ui/dialogs';
 import { openModal } from './ui/modal';
 
 type PaintTool = 'paint' | 'erase' | 'fill' | 'pick';
@@ -133,7 +134,7 @@ export class PaintEditor {
         el('button', { class: 'btn', text: '+ New', onclick: () => this.openNewTextureDialog() }),
         el('button', { class: 'btn', text: 'Import…', onclick: () => importInput.click() }),
         el('button', { class: 'btn', text: 'Duplicate', onclick: () => this.duplicateTexture() }),
-        el('button', { class: 'btn danger', text: 'Delete', onclick: () => this.deleteTexture() }),
+        el('button', { class: 'btn danger', text: 'Delete', onclick: () => void this.deleteTexture() }),
       ),
       this.listEl,
       importInput,
@@ -283,7 +284,7 @@ export class PaintEditor {
       });
       this.open(name, this.overlayModelId);
     } catch (err) {
-      alert(`Could not import image: ${err instanceof Error ? err.message : err}`);
+      await appAlert(`Could not import image: ${err instanceof Error ? err.message : err}`, { title: 'Import failed' });
     }
   }
 
@@ -299,14 +300,20 @@ export class PaintEditor {
     this.open(copyName, this.overlayModelId);
   }
 
-  private deleteTexture(): void {
+  private async deleteTexture(): Promise<void> {
     const name = this.current;
     if (!name || !this.textures.isProjectTexture(name)) return;
     const users = this.store.project.models.filter((m) => m.texture === name).length;
     const msg = this.textures.isBuiltin(name)
       ? `Revert "${name}" to the built-in version? Your edits to it will be lost.`
       : `Delete texture "${name}"? ${users} model(s) use it and will lose their texture.`;
-    if (!confirm(msg)) return;
+    const revert = this.textures.isBuiltin(name);
+    const ok = await appConfirm(msg, {
+      title: revert ? 'Revert texture' : 'Delete texture',
+      confirmLabel: revert ? 'Revert' : 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     this.store.removeTexture(name);
   }
 

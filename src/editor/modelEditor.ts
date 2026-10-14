@@ -39,6 +39,7 @@ import { icon } from './ui/icons';
 import { renameInline } from './ui/rename';
 import { makeSplitter } from './ui/splitter';
 import { TransformBar } from './ui/transformBar';
+import { appConfirm } from './ui/dialogs';
 import { AxisGizmo, buildViewMenu } from './ui/viewControls';
 
 const SNAP_OPTIONS = [
@@ -284,7 +285,7 @@ export class ModelEditor {
         { class: 'panel-toolbar' },
         el('button', { class: 'btn', text: '+ New', onclick: () => this.createNewModel() }),
         el('button', { class: 'btn', text: 'Duplicate', onclick: () => this.duplicateModel() }),
-        el('button', { class: 'btn danger', text: 'Delete', onclick: () => this.deleteModel() }),
+        el('button', { class: 'btn danger', text: 'Delete', onclick: () => void this.deleteModel() }),
       ),
       this.modelListEl,
       el('div', { class: 'panel-header' }, el('span', { text: 'Shapes' })),
@@ -635,12 +636,13 @@ export class ModelEditor {
     this.open(copy.id);
   }
 
-  private deleteModel(): void {
-    if (!this.model) return;
-    const n = this.store.countInstances(this.model.id);
-    const msg = n > 0 ? `Delete "${this.model.name}"? ${n} placed instance(s) in the level will be removed too.` : `Delete "${this.model.name}"?`;
-    if (!confirm(msg)) return;
-    this.store.removeModel(this.model.id);
+  private async deleteModel(): Promise<void> {
+    const model = this.model;
+    if (!model) return;
+    const n = this.store.countInstances(model.id);
+    const msg = n > 0 ? `Delete "${model.name}"? ${n} placed instance(s) in the level will be removed too.` : `Delete "${model.name}"?`;
+    if (!(await appConfirm(msg, { title: 'Delete model', confirmLabel: 'Delete', danger: true }))) return;
+    this.store.removeModel(model.id);
     // onStoreEvent opens another model
   }
 

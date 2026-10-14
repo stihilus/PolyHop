@@ -2,6 +2,7 @@
 
 import type { Store } from '../store';
 import { clear, el } from '../ui/dom';
+import { appConfirm } from '../ui/dialogs';
 import { renameInline } from '../ui/rename';
 
 /** The level list: pick the level to edit, add, copy, rename, delete and reorder. */
@@ -32,7 +33,10 @@ export function fillLevelBar(bar: HTMLElement, store: Store, playing: boolean): 
         renameInline(select, store.level.name, (name) => store.renameLevel(name)),
       ),
       small('Delete', 'Delete this level (a project keeps at least one)', () => {
-        if (confirm(`Delete “${store.level.name}” and everything in it?`)) store.removeLevel();
+        const level = store.level;
+        void appConfirm(`Delete “${level.name}” and everything in it?`, { title: 'Delete level', confirmLabel: 'Delete', danger: true }).then((ok) => {
+          if (ok && store.level === level) store.removeLevel();
+        });
       }, levels.length <= 1),
       small('◀', 'Play this level earlier', () => store.moveLevel(-1), store.levelIndex === 0),
       small('▶', 'Play this level later', () => store.moveLevel(1), store.levelIndex >= levels.length - 1),

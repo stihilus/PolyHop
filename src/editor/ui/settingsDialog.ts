@@ -27,6 +27,7 @@ import { menuBackdrop, menuContent } from '../../runtime/menu';
 import { showSplash } from '../../runtime/splash';
 import type { Store } from '../store';
 import { el } from './dom';
+import { appAlert } from './dialogs';
 import { type Field, buildForm } from './form';
 
 export { keyLabel };
@@ -219,7 +220,7 @@ export function openSettingsDialog(store: Store): void {
         store.settingsChanged();
         renderSplash();
       } catch (err) {
-        alert(`Could not use this picture: ${err instanceof Error ? err.message : err}`);
+        await appAlert(`Could not use this picture: ${err instanceof Error ? err.message : err}`, { title: 'Picture not used' });
       }
     });
     const buttons = el(
@@ -331,7 +332,7 @@ export function openSettingsDialog(store: Store): void {
         commitMenu();
         renderMenuControls();
       } catch (err) {
-        alert(`Could not use this picture: ${err instanceof Error ? err.message : err}`);
+        await appAlert(`Could not use this picture: ${err instanceof Error ? err.message : err}`, { title: 'Picture not used' });
       }
     });
     return el(

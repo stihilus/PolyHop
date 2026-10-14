@@ -10,6 +10,7 @@ import { kvGet, kvSet } from '../core/storage';
 import { pruneForExport } from '../core/exportProject';
 import { type Project, type ProjectTexture, normalizeProject } from '../core/types';
 import type { TextureLibrary } from '../runtime/textures';
+import { appAlert } from './ui/dialogs';
 import type { Store } from './store';
 
 // Minimal typings for the File System Access API (not in lib.dom for every TypeScript version).
@@ -210,7 +211,7 @@ export class FileSession {
       }
     } catch (err) {
       console.error('Save failed', err);
-      alert(`Could not save the project: ${err instanceof Error ? err.message : err}`);
+      await appAlert(`Could not save the project: ${err instanceof Error ? err.message : err}`, { title: 'Save failed' });
       return 'failed';
     }
 
@@ -250,7 +251,7 @@ export class FileSession {
       return true;
     } catch (err) {
       if (isAbort(err)) return false;
-      alert(`Could not open the project: ${err instanceof Error ? err.message : err}`);
+      await appAlert(`Could not open the project: ${err instanceof Error ? err.message : err}`, { title: 'Open failed' });
       return false;
     }
   }

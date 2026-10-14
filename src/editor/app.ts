@@ -31,6 +31,7 @@ import { DEFAULT_EXPORT_OPTIONS, exportGame } from './exportGame';
 import { openExportDialog } from './ui/exportDialog';
 import { shortcutSheet } from './ui/shortcutSheet';
 import { brandElement } from './ui/brand';
+import { appAlert, appConfirm, appPrompt, dialogOpen } from './ui/dialogs';
 import { openWelcomeDialog } from './ui/welcomeDialog';
 import { kvSet } from '../core/storage';
 import { makeSplitter } from './ui/splitter';
@@ -142,7 +143,10 @@ export class EditorApp {
   private async importRig(file: File): Promise<void> {
     try {
       const json = JSON.parse(await file.text()) as { textures?: Record<string, string> };
-      const answer = prompt('How tall should the model be, in meters?\n(Leave empty to use 16 file units = 1 m.)', '1');
+      const answer = await appPrompt('How tall should the model be, in meters?\n(Leave empty to use 16 file units = 1 m.)', '1', {
+        title: 'Import rig',
+        confirmLabel: 'Import',
+      });
       if (answer === null) return;
       const height = parseFloat(answer);
 
@@ -173,14 +177,20 @@ export class EditorApp {
         );
       }
       if (result.warnings.length > 0) lines.push(`Notes: ${result.warnings.slice(0, 3).join('; ')}`);
-      alert(lines.join('\n\n'));
+      await appAlert(lines.join('\n\n'), { title: 'Rig imported' });
     } catch (err) {
-      alert(`Could not import the rig: ${err instanceof Error ? err.message : err}`);
+      await appAlert(`Could not import the rig: ${err instanceof Error ? err.message : err}`, { title: 'Import failed' });
     }
   }
 
-  private confirmDiscard(question: string): boolean {
-    return !this.files.hasUnsavedChanges() || confirm(`${question}\n\nThe current project has changes that are not saved to a file.`);
+  /** True when it is fine to replace the project: nothing is lost, or the user said to go on. */
+  private async confirmDiscard(question: string): Promise<boolean> {
+    if (!this.files.hasUnsavedChanges()) return true;
+    return appConfirm(`${question}\n\nThe current project has changes that are not saved to a file.`, {
+      title: 'Unsaved changes',
+      confirmLabel: 'Discard changes and continue',
+      danger: true,
+    });
   }
 
   private welcomeClose: (() => void) | null = null;
@@ -217,7 +227,7 @@ export class EditorApp {
 
   /** A new project is the blank one: a flat ground, the characters, and nothing else. */
   private async newProject(): Promise<void> {
-    if (!this.confirmDiscard('Start a new project?')) return;
+    if (!(await this.confirmDiscard('Start a new project?'))) return;
     this.viewport.stop();
     this.updatePlayUi();
     this.store.setProject(createDefaultProject());
@@ -225,7 +235,7 @@ export class EditorApp {
   }
 
   private async openProject(fallbackInput: HTMLInputElement): Promise<void> {
-    if (!this.confirmDiscard('Open another project?')) return;
+    if (!(await this.confirmDiscard('Open another project?'))) return;
     if (!this.files.supported) {
       fallbackInput.click();
       return;
@@ -729,7 +739,7 @@ export class EditorApp {
 
   private onKey(e: KeyboardEvent): void {
     // the welcome screen is a dialog: the editor behind it does not take keys
-    if (this.welcomeClose) return;
+    if (this.welcomeClose || dialogOpen()) return;
     // Save works in every mode, also while typing in a field
     if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
       e.preventDefault();

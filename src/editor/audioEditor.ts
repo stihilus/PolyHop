@@ -37,6 +37,7 @@ import { AudioEngine, bytesToBase64 } from '../runtime/audio';
 import { CHANNEL_COLORS, MusicRoll, type RollView } from './musicRoll';
 import type { Store } from './store';
 import { clear, el } from './ui/dom';
+import { appConfirm } from './ui/dialogs';
 import { renameInline } from './ui/rename';
 
 /** "12.5 s" or "2:08". */
@@ -307,7 +308,7 @@ export class AudioEditor {
         el('button', { class: 'btn', text: 'Import…', title: 'An audio file (wav, ogg, mp3)', onclick: () => this.fileInput.click() }),
         el('button', { class: 'btn', text: 'Starter sounds', title: 'Add the sounds of the built-in pickups and the player', onclick: () => this.addStarter() }),
         el('button', { class: 'btn', text: 'Duplicate', onclick: () => this.duplicate() }),
-        el('button', { class: 'btn danger', text: 'Delete', onclick: () => this.remove() }),
+        el('button', { class: 'btn danger', text: 'Delete', onclick: () => void this.remove() }),
       ),
       this.listEl,
       this.fileInput,
@@ -366,10 +367,15 @@ export class AudioEditor {
     this.add({ ...structuredClone(s), id: newId(), name: this.uniqueName(`${s.name} copy`) });
   }
 
-  private remove(): void {
+  private async remove(): Promise<void> {
     const s = this.selected();
     if (!s) return;
-    if (!confirm(`Delete the sound "${s.name}"? Rules and settings that use it become silent.`)) return;
+    const ok = await appConfirm(`Delete the sound "${s.name}"? Rules and settings that use it become silent.`, {
+      title: 'Delete sound',
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
     this.engine.stopMusic();
     const project = this.store.project;
     project.sounds = project.sounds.filter((x) => x.id !== s.id);
@@ -393,7 +399,13 @@ export class AudioEditor {
 
   private async importFile(file: File): Promise<void> {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    if (bytes.length > 4 * 1024 * 1024 && !confirm(`${file.name} is ${(bytes.length / 1048576).toFixed(1)} MB. It is stored inside the project file; import it anyway?`)) return;
+    if (bytes.length > 4 * 1024 * 1024) {
+      const ok = await appConfirm(`${file.name} is ${(bytes.length / 1048576).toFixed(1)} MB. It is stored inside the project file; import it anyway?`, {
+        title: 'Large file',
+        confirmLabel: 'Import',
+      });
+      if (!ok) return;
+    }
     const mime = file.type || (file.name.toLowerCase().endsWith('.ogg') ? 'audio/ogg' : file.name.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg');
     this.add({
       id: newId(),

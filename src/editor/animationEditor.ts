@@ -27,6 +27,7 @@ import { clear, el } from './ui/dom';
 import { icon } from './ui/icons';
 import { renameInline } from './ui/rename';
 import { makeSplitter } from './ui/splitter';
+import { appConfirm } from './ui/dialogs';
 import { AxisGizmo, buildViewMenu } from './ui/viewControls';
 
 const LABEL_W = 170; // width of the bone names column of the timeline
@@ -526,11 +527,12 @@ export class AnimationEditor {
     this.refreshAll();
   }
 
-  private deleteCurrentClip(): void {
+  private async deleteCurrentClip(): Promise<void> {
     const model = this.model;
     const clip = this.clip;
     if (!model || !clip) return;
-    if (!confirm(`Delete the animation "${clip.name}"?`)) return;
+    const ok = await appConfirm(`Delete the animation "${clip.name}"?`, { title: 'Delete animation', confirmLabel: 'Delete', danger: true });
+    if (!ok || this.model !== model || !model.clips.includes(clip)) return;
     model.clips = model.clips.filter((c) => c !== clip);
     this.clip = model.clips[0] ?? null;
     this.selectedKey = null;
@@ -743,7 +745,7 @@ export class AnimationEditor {
         { class: 'panel-toolbar' },
         el('button', { class: 'btn', text: '+ New', onclick: () => this.newClip() }),
         el('button', { class: 'btn', text: 'Duplicate', onclick: () => this.duplicateCurrentClip() }),
-        el('button', { class: 'btn danger', text: 'Delete', onclick: () => this.deleteCurrentClip() }),
+        el('button', { class: 'btn danger', text: 'Delete', onclick: () => void this.deleteCurrentClip() }),
       ),
       this.clipListEl,
       el('div', { class: 'panel-header' }, el('span', { text: 'Bones' })),

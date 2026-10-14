@@ -1869,6 +1869,37 @@ input[type='search']:focus {
   image-rendering: pixelated;
 }
 
+/* ---------------------------------------------------------------- the editor's own alert / confirm / prompt */
+.app-dialog-backdrop {
+  z-index: 200;
+}
+.app-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+.app-dialog-message {
+  padding: 4px 0 2px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.app-dialog-field {
+  margin-top: 10px;
+}
+.app-dialog-footer {
+  gap: 8px;
+}
+.btn.primary.danger {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+.btn.primary.danger:hover {
+  background: #f0705f;
+  border-color: #f0705f;
+  color: #fff;
+}
+
 /* ---------------------------------------------------------------- brand and welcome screen */
 .brand-art {
   display: inline-flex;
@@ -1904,19 +1935,19 @@ input[type='search']:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 360px;
+  min-height: 340px;
   padding: 28px;
   background:
-    radial-gradient(circle at 50% 38%, rgb(255 178 62 / 0.16), transparent 62%),
+    radial-gradient(circle at 50% 42%, rgb(255 255 255 / 0.07), transparent 62%),
     repeating-linear-gradient(0deg, transparent 0 31px, rgb(255 255 255 / 0.035) 31px 32px),
     repeating-linear-gradient(90deg, transparent 0 31px, rgb(255 255 255 / 0.035) 31px 32px),
     #101217;
   border-right: 1px solid var(--border);
 }
 .welcome-logotype {
-  width: min(260px, 100%);
+  width: min(182px, 100%);
   aspect-ratio: 363 / 419;
-  filter: drop-shadow(5px 5px 0 var(--accent-dim));
+  color: #fff;
 }
 .welcome-body {
   display: flex;
@@ -2015,7 +2046,7 @@ input[type='search']:focus {
     border-bottom: 1px solid var(--border);
   }
   .welcome-logotype {
-    width: min(150px, 100%);
+    width: min(105px, 100%);
   }
   .welcome-body {
     padding: 18px 16px 14px;

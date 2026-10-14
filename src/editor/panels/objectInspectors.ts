@@ -10,6 +10,7 @@ import { type Field, buildForm } from '../ui/form';
 import { buildTilePicker } from '../ui/tilePicker';
 import { BLOCK_FIELDS } from './fields';
 import type { PanelHost } from './host';
+import { appConfirm } from '../ui/dialogs';
 
 /** Several objects selected: what can be done to all of them at once. */
 export function buildMultiInspector(host: PanelHost): void {
@@ -312,8 +313,8 @@ export function buildPrefabInspector(host: PanelHost, prefab: Prefab): void {
             class: 'btn danger',
             text: 'Reset',
             title: 'Put this built-in game object back as it came',
-            onclick: () => {
-              if (!confirm(`Put “${prefab.name}” back as it came?`)) return;
+            onclick: async () => {
+              if (!(await appConfirm(`Put “${prefab.name}” back as it came?`, { title: 'Reset game object', confirmLabel: 'Reset', danger: true }))) return;
               host.store.resetPrefab(prefab.id);
               host.refreshInspector();
             },
@@ -322,8 +323,8 @@ export function buildPrefabInspector(host: PanelHost, prefab: Prefab): void {
             class: 'btn danger',
             text: 'Delete',
             title: 'Delete this asset (objects already placed stay in the level)',
-            onclick: () => {
-              if (!confirm(`Delete the game object “${prefab.name}”? Objects already placed stay.`)) return;
+            onclick: async () => {
+              if (!(await appConfirm(`Delete the game object “${prefab.name}”? Objects already placed stay.`, { title: 'Delete game object', confirmLabel: 'Delete', danger: true }))) return;
               host.store.removePrefab(prefab.id);
               host.selectedPrefabId = null;
               host.refreshAssets();
