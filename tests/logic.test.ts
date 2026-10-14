@@ -13,9 +13,10 @@ import {
 } from '../src/core/logic';
 import { ITEM_MODEL_IDS, createItemModel } from '../src/core/items';
 import { PRESETS, type PresetKind, missingVariables, presetRules, presetVariables } from '../src/core/presets';
-import { type Project, createDefaultProject, ensurePresetAssets, normalizeProject } from '../src/core/types';
+import { type Project, ensurePresetAssets, normalizeProject } from '../src/core/types';
 import { LogicRuntime, triggerBox } from '../src/runtime/logic';
 import type { Box } from '../src/runtime/physics';
+import { createTestProject } from './helpers';
 
 let n = 0;
 const ids = () => `i${++n}`;
@@ -205,7 +206,7 @@ describe('presets', () => {
 
 describe('the project', () => {
   it('starts with items, variables and a level that uses them', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     expect(p.variables.map((v) => v.name).sort()).toEqual(['coins', 'health', 'keys']);
     for (const id of Object.values(ITEM_MODEL_IDS)) expect(p.models.some((m) => m.id === id)).toBe(true);
     const withRules = p.levels[0]!.objects.filter((o) => o.rules.length > 0);
@@ -220,7 +221,7 @@ describe('the project', () => {
   });
 
   it('keeps rules and variables through a save and a load', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     const back = normalizeProject(JSON.parse(JSON.stringify(p)));
     expect(back.variables).toEqual(p.variables);
     expect(back.levels[0]!.objects.find((o) => o.name === 'Door')!.rules).toEqual(p.levels[0]!.objects.find((o) => o.name === 'Door')!.rules);
@@ -267,7 +268,7 @@ describe('LogicRuntime', () => {
   const player = (x: number, y = 0, z = 0): Box => ({ minX: x - 0.4, maxX: x + 0.4, minY: y, maxY: y + 1.8, minZ: z - 0.4, maxZ: z + 0.4 });
 
   it('fires a pickup once when the player reaches it', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     p.levels[0]!.objects = p.levels[0]!.objects.filter((o) => o.name === 'Coin 1');
     const coin = p.levels[0]!.objects[0]!;
     const rt = new LogicRuntime();
@@ -287,7 +288,7 @@ describe('LogicRuntime', () => {
   });
 
   it('ignores objects that are already gone', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     const coin = p.levels[0]!.objects.find((o) => o.name === 'Coin 1')!;
     const rt = new LogicRuntime();
     begin(rt, p);
@@ -295,7 +296,7 @@ describe('LogicRuntime', () => {
   });
 
   it('runs "game starts" rules at the start', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     p.levels[0]!.objects = [];
     const b = normalizeProject({
       level: { objects: [{ kind: 'block', rules: [{ event: 'start', actions: [{ type: 'set', variable: 'coins', value: 5 }, { type: 'message', text: 'Go!' }] }] }] },
@@ -309,7 +310,7 @@ describe('LogicRuntime', () => {
   });
 
   it('the touch area of a block is its box and of a model its cubes', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     const door = p.levels[0]!.objects.find((o) => o.name === 'Door')!;
     const box = triggerBox(door, () => undefined)!;
     expect(box.maxX - box.minX).toBeCloseTo(2);
@@ -319,7 +320,7 @@ describe('LogicRuntime', () => {
   });
 
   it('restart brings the values and the triggers back', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     const rt = new LogicRuntime();
     begin(rt, p);
     rt.store.set('coins', 7);

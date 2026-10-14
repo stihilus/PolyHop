@@ -133,7 +133,8 @@ Properties (look and behavior), double-click it or drag it into the view to plac
 The rules of a preset can also be put on any object with *Behavior > Make this a…*.
 
 Pickups are ordinary models (`Items-16.png` atlas, a spinning animation), so they can be re-textured and
-re-animated in the Models and Animate tabs. The default level has coins, a key, a locked door, an apple, a checkpoint, a hazard, a lift and a goal on top of the platforms.
+re-animated in the Models and Animate tabs. A new project is blank: place a game object from Assets and it brings its
+model, its variables and its sounds with it.
 While playing, the HUD (top right) shows the variables marked *On screen*, with messages at the bottom.
 Objects taken away or moved during a run come back when you stop (the game plays a copy of the level).
 
@@ -203,74 +204,38 @@ other clip is yours to use. Edits show up the next time you press Play, no expor
 | Pivot | Properties > Bone > Pivot: the joint the bone turns around (a door turns about its hinge). Type it, or use center / top / bottom of the bone's shapes. |
 | In the level | Select a model in the Level and pick **Animation** in its properties: it plays that clip in a loop (also while editing), with its own speed. Its collision box stays where it was. |
 
-### Built-in props (Models)
+### Built-in models (Models)
 
-Every project starts with 47 ready-made models in **Models** (and Assets > Models), blocky-cute props with
-16 px tiles from `assets/textures/Props-16.png`. They are ordinary models: place them, re-texture them, change
-their cubes, animate them, or build a game object asset from one (*Assets > + New object… > Made of a model*).
+A new project is **blank**: a flat ground and nothing else. Its **Models** (and Assets > Models) are the characters
+and nothing more: the two humanoids (male and female, with their skins, rig and animations), the **Slime** and the
+**Villager**. They are ordinary models: place them, re-texture them, change their cubes, animate them, or build a
+game object asset from one (*Assets > + New object… > Made of a model*).
 
-| Group | Models |
-| --- | --- |
-| Plants and rocks | Bush, Cactus, Mushroom, Pumpkin, Hay bale, Boulder, Mossy boulder |
-| Sprites (crossing planes with cut-out pixels) | Poppy, Cornflower, Dandelion, Daisy, Tulip, Sunflower, Tall grass, Fern, Sapling, Wheat, Rose bush, Reeds |
-| Furniture and props | Crate, Barrel, Chest, Torch, Lantern, Campfire, Fence, Bench, Table, Bookshelf, Well, Anvil, Gravestone, Banner, Signpost, Lamp post, Bed, Candle, Snowman, Scarecrow |
-| Potions and gems | Red / Blue / Green potion, Ruby / Emerald / Sapphire / Amethyst / Diamond crystals |
+The pickups (**Coin**, **Key**, **Apple**, **Flag**, **Trophy**) are models too, but they are put in Models when
+you place their game object (Assets > Game objects), together with the variables and sounds it needs. The same goes
+for the Slime and the Villager if you delete them and place an Enemy or an NPC. Some come with animations (pick them
+in a placed instance's **Animation**): Slime `hop`, Villager `idle`, the pickups `spin`.
 
-Some come with animations (pick them in a placed instance's **Animation**): Chest `open` / `close`, Torch, Candle and
-Campfire `flicker`, Banner `sway`, the crystals `spin`. Sprites and thin parts are cut-out planes: switch **Solid**
-off for them if you want the player to walk through. `python3 tools/make-props.py` redraws the atlas; the models
-are described in `src/core/props.ts`. Older projects get the props once when they are opened.
+Every texture stays: `Textures-16`, `Seamless-16`, `Props-16` (furniture, ore, plants, potions, gems ...),
+`Kit-16` (walls, roofs, bricks, water), `Items-16`, `Plants-16`, `Demo-16` (crystal, ruin stone, runes) and the
+character skins are atlases to paint blocks and shapes with. The tiles are there even though the models that used
+them are gone. `python3 tools/make-props.py`, `make-kit.py` and `make-demo.py` redraw the atlases; the characters
+are described in `src/core/props.ts` and `src/core/humanoid.ts`. Projects made before keep the models they have;
+older ones are not given the props, the kit or the demo models any more.
 
-The atlas also holds tiles that no model uses (ore, bark, leaves, planks, cobblestone, ...): they are there to
-paint on shapes with the Paint tool.
-
-### Models as files, and the demo (Mossy Hills)
-
-Every `assets/models/*.json` is a model (the same JSON a project keeps for its models) that is part of every new
-project, like the props and the building kit. Drop a file there and rebuild to add one. The ones that ship are the
-models of the demo (`tools/make-demo.py` makes them, the demo atlas `Demo-16.png` and the splash picture), made of
-cubes like the others: **Star crystal** (spins, collectible), **Crystal cluster**, **Ruin column** (broken, with a
-rune band) and **Thorn spikes**. Models are an older project's too: projects from before version 10 get them once.
-
-**Example: Mossy Hills** (File > New project > Example) is made of the same data as any project, so it can be
-opened and changed:
-
-| Level | What it shows |
-| --- | --- |
-| **1. Meadow** (easy, a valley) | A sculpted terrain (hills, a rim, a path painted in dirt, a sandy pond), a village of kit houses, trees and flowers, water you can swim in with an island, a platform that carries you over it, a villager (**Old Moss**) with a deep voice who asks a question with three answers, a sign, a checkpoint, slimes to stomp, coins, an apple, a ruin tower of stones to climb, a spring mushroom that bounces you up to a ledge of coins, and an old gate that opens (a *when* rule) once three **star crystals** are found. The portal behind it goes to level 2. |
-| **2. Sky Ruins** (harder, a sunset) | Islands and stones in the air, a moving platform, a run of narrow pillars that need a run and a double jump, spikes, slimes, a spring mushroom up to a high ledge with the **key**, a glide over a big gap (the demo turns **Glide** on), a temple with a **locked door** and the **trophy**. Bonus stars can be found on the way. Falling puts you back at the checkpoint. |
-
-The hero wears **Character-Explorer.png**, a skin made for the demo (a green cap, a red scarf, a tunic and boots;
-`tools/make-humanoid.py`). It is in every project: select the player > Skin. (The same outfit exists for the
-female character as `Character-Female-Explorer.png`.)
-
-### Building kit and trees (Models)
-
-Besides the props, every project has about 30 building parts and trees (`Kit-16.png`, `src/core/kit.ts`), built the
-way the Hytale art team asks for (see **How the built-in models are made** below): chunky cubes, turned to make
-angles (a roof is two turned slabs, a crown of leaves is a clump of turned cubes), steps instead of ramps.
-
-| Group | Models |
-| --- | --- |
-| Walls and pieces | Stone wall, Stone pillar, Archway, Stone stairs, Wooden stairs, Flagstone slab, Cobble path, Iron gate, Wooden fence |
-| Buildings | Cottage (timber frame, gable roof, shutters, chimney), Round tower, Roof piece, Chimney, Stone bridge, Wooden bridge, Market stall, Windmill (`turn`), Lighthouse |
-| Rocks | Large boulder, Standing ring |
-| Trees and plants | Oak, Cherry, Autumn, Pine, Birch, Palm and Dead tree (a trunk of cubes, crowns of turned cubes, tiers for the pine), Round bush, Hedge, Tree stump, Fallen log, Giant mushroom |
-
-Parts are meant to be combined: copy a wall along a line, put an archway in it, a tower at the corner. Stairs,
-arches and bridges are collided as the cubes they are made of, and the player walks up the stairs.
-`python3 tools/make-kit.py` redraws the atlas.
+The explorer skin (a green cap, a red scarf, a tunic and boots; `tools/make-humanoid.py`) is in every project: select
+the player > Skin. (The same outfit exists for the female character as `Character-Female-Explorer.png`.)
 
 ### How the built-in models are made (the Hytale guide)
 
-Every built-in model - the two characters, the pickups, the props, the kit and the demo models - follows
+Every built-in model - the two characters, the pickups, the Slime and the Villager - follows
 [An Introduction to Making Models for Hytale](https://hytale.com/news/2025/12/an-introduction-to-making-models-for-hytale)
 (Hypixel Studios, December 2025), taken as the rule for making models:
 
 | Rule | In PolyHop |
 | --- | --- |
 | **Cubes and quads only** | A model is made of cubes (6 sides) and quads (2 sides, a flat rectangle). No triangles, wedges, pyramids, cones, cylinders, spheres, bevels, edge loops, no skewed or tapered boxes. Angles are made by turning cubes. |
-| **No spheres** | Round things are two cubes, one turned 45° (a barrel, a tower, a stump), a clump of turned cubes (foliage, a boulder), or a ring of cubes (the standing ring). |
+| **No spheres** | Round things are two cubes, one turned 45° (a barrel, a tower, a stump), a clump of turned cubes (foliage, a boulder), or a ring of cubes. |
 | **Chunky, toylike** | Small, bulky, iconic shapes; a pure silhouette; no thin "realistic" 1 px details (a cube thinner than one texel is a quad). The characters have a head of about a fifth of the body and plain cube limbs. |
 | **Triangle budget** | T1 about 8 triangles (leaves, grass: a sprite is 2 quads), T2 up to 50 (a mushroom, a coin), T3 under 400 (furniture, a house, a tree, a character), T4 about 1000 (bosses). A cube is 12 triangles, a quad 2. Every built-in model is T3 or less. |
 | **Texel density** | Characters 64 px per unit, props and blocks 32 px per unit; do not stretch a part more than 0.7 - 1.3 times on an axis. |
@@ -311,7 +276,7 @@ model in Player > Look > Model; its skin follows when you change from one to the
 | What | How |
 | --- | --- |
 | **Animation** | The Humanoid has `idle`, `walk`, `run`, `jump`, `fall`, `glide`, `swim`, `crouch` and `crouch_walk`. The player picks one from what it is doing (speed, in the air, crouching) and blends between them. A walk plays faster when the player is faster. |
-| **Skin** | Select the player > **Skin**. Any texture with the layout of the model works. For the Humanoid: `Character-Skin.png` (a plain outfit), `Character-Explorer.png` (the demo's hero) and `Character-Template.png`; for the female one: `Character-Female-Skin.png`, `Character-Female-Explorer.png` and `Character-Female-Template.png`. A template paints every body part in its own color with a white dot in the corner of each face, so you can see where things go. Paint a skin in the Paint tab: clear pixels on the hair parts show the head under them, so a character can be bald. |
+| **Skin** | Select the player > **Skin**. Any texture with the layout of the model works. For the Humanoid: `Character-Skin.png` (a plain outfit), `Character-Explorer.png` (the explorer) and `Character-Template.png`; for the female one: `Character-Female-Skin.png`, `Character-Female-Explorer.png` and `Character-Female-Template.png`. A template paints every body part in its own color with a white dot in the corner of each face, so you can see where things go. Paint a skin in the Paint tab: clear pixels on the hair parts show the head under them, so a character can be bald. |
 | **Attachments** | Select the player > **Attachments > + Attach a model…**. A model (hat, hair, backpack) hangs on a bone such as `Head`, with an offset, rotation and scale, and follows the animation. Bones are matched by name, so attachments survive a model swap. |
 | **Rig panel** | Models tab > **Rig**: lists the bones (name, parent, pivot), adds bones, previews every animation (and **Edit animations →** opens the animation editor). A shape's **Bone** says what it moves with. |
 | **Import** | File > **Import rig model (.json)…** reads a Blockbench Hytale "blockymodel" file (elements with `from` / `to`, `rotationOrigin`, per-face UVs and children) as a model with bones. Import its PNG in the Paint tab, then pick it as the model's texture. |
@@ -352,13 +317,11 @@ into the file too, so it looks the same on another machine.
 | Save | The first time it asks for a file name, afterwards it overwrites that same file (Chrome / Edge). Other browsers download a fresh copy each time. |
 | Save as… (Ctrl/Cmd+Shift+S) | Always asks for a new file. |
 | Open project… | Loads a saved file and keeps Save pointed at it. |
-| New project | Asks what to start with (see below) and forgets the file. |
+| New project | Starts a blank project (see below) and forgets the file. |
 
-**Starting.** The first time the editor opens (and with **New project**) a dialog offers **Blank project** (an empty
-level with a floor) or **Example: Mossy Hills**, a small two-level game made with what the editor offers (below).
-Closing the dialog keeps what is open. A blank project has the 13 game objects (Assets > Game objects) and, in
-**Models**, the two characters and the models those game objects are made of (coin, key, apple, flag, trophy, slime,
-villager), so any of them can be opened and changed; the props and the building kit are added when you place one.
+**Starting.** The editor always opens a **blank project** (the first time, and with **New project**): one level
+with a flat ground to stand on, the theme as the game's music and the 13 game objects (Assets > Game objects). Its
+Models are the two humanoids, the Slime and the Villager; everything else comes when you place it.
 
 The top bar shows the file name and `unsaved changes` when the project differs from the file. The
 project is also autosaved in the browser as a backup, which only matters if you forget to Save.
@@ -623,11 +586,11 @@ carries the file along.
   it); drag the four corner points or the whole quad. "Pick tile" maps the face to a clicked tile
   (Shift = all faces). Rotate / flip / reset size / copy to all faces.
 - **Paint** edits the *whole* atlas. Every model and level block using it updates live.
-- Built-in atlases (`assets/textures`): `Textures-16.png` (the main one, used by the default level),
+- Built-in atlases (`assets/textures`): `Textures-16.png` (the main one, used by the ground of a new level),
   `Seamless-16.png` (192 seamless 16 × 16 tiles), and the special ones: `Items-16.png` (pickups),
-  `Plants-16.png` (grass and flowers with transparency), `Props-16.png` (80 tiles for the prop models below),
+  `Plants-16.png` (grass and flowers with transparency), `Props-16.png` (80 tiles: furniture, ore, plants, potions, gems, the Slime and the Villager),
   `Character-*.png` (the skins and templates of the two humanoids),
-  `Kit-16.png` (building kit) and `Demo-16.png` (the demo's crystals and ruins).
+  `Kit-16.png` (walls, roofs, bricks, water) and `Demo-16.png` (crystals, ruin stone, runes).
   Drop any PNG there (name it `Something-16.png` for a 16 px tile size) and it is offered everywhere.
   New blocks and models start on the first atlas whose default tile has pixels in it.
 - Textures: built-in atlases live in `assets/textures` (read-only). The first stroke on one copies it
@@ -650,7 +613,7 @@ carries the file along.
    several levels with their own start and sky, HUD, sound effects and music.
 5. **Export** (done): standalone HTML5 zip for itch.io, trimmed to what the game plays; settings menu and
    touch controls for the player; chunked and batched drawing for big levels.
-6. **Modeled world** (done): building kit and nature as modeled shapes, terrain, enemies and conversations,
+6. **Modeled world** (done): terrain, enemies and conversations,
    light / shadows / water / low resolution.
 
 Later: collision that follows animated models, more terrain tools (roads, scattering), a prop paint brush,

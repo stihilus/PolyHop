@@ -5,14 +5,12 @@ import { packRects } from './atlasPack';
 import { HUMANOID_FEMALE_ID, HUMANOID_ID, HUMANOID_IDS, OLD_HUMANOID_SKINS, createHumanoidModel, refreshHumanoidLayout } from './humanoid';
 import { LEGACY_MODEL_HASHES } from './legacyModels';
 import { geometryHash } from './modelHash';
-import { ITEMS_ATLAS, ITEM_MODEL_IDS, type ItemKind, TILE, createItemModel } from './items';
+import { ITEM_MODEL_IDS, type ItemKind, createItemModel } from './items';
 import { type Rule, type Variable, normalizeRules, normalizeVariables } from './logic';
-import { PRESETS, type PresetKind, missingVariables, presetRules, presetSounds, presetVariables } from './presets';
+import { PRESETS, type PresetKind, missingVariables, presetSounds, presetVariables } from './presets';
 import { PRESET_ITEM, PRESET_PROP, builtInPrefabs } from './prefabs';
-import { rawAssetModels } from './assetModels';
 import { type MenuScreen, normalizeMenu } from './menu';
 import { type SplashScreen, normalizeSplash } from './splash';
-import { KIT_KINDS, type KitKind, builtInKitModels, createKitModel, kitModelId } from './kit';
 import { type LevelLook, normalizeLook } from './look';
 import { PROP_KINDS, type PropKind, RETIRED_PROP_IDS, builtInPropModels, createPropModel, propModelId } from './props';
 import { SOUND_IDS, type SoundAsset, builtInSound, normalizeSounds } from './sounds';
@@ -23,11 +21,8 @@ import {
   boxMesh,
   cloneMesh,
   isValidMesh,
-  meshBounds,
   meshSize,
-  rockMesh,
   sanitizeFaceTile,
-  wedgeMesh,
 } from './mesh';
 import { PixelBuffer } from './pixels';
 import { type TerrainInfo, isTerrainGrid, sanitizeTerrainInfo } from './terrain';
@@ -363,7 +358,7 @@ export function defaultPlayer(): PlayerSettings {
 
 export function defaultSettings(): ProjectSettings {
   return {
-    name: 'My Platformer',
+    name: 'My Game',
     fullscreen: false,
     controls: structuredClone(DEFAULT_CONTROLS),
     mouseSensitivity: 1,
@@ -644,109 +639,6 @@ export function createModelInstance(model: Model, position: Vec3): LevelModelIns
   };
 }
 
-/** A small test level: ground, stairs, floating platforms, crates, a crouch tunnel and a tall wall. */
-export function defaultLevel(): LevelObject[] {
-  const GRASS: [number, number] = [3, 16];
-  const STONE: [number, number] = [7, 0];
-  const BRICK: [number, number] = [3, 3];
-  const CRATE: [number, number] = [2, 14];
-  const WOOD: [number, number] = [3, 13];
-
-  const objects: LevelObject[] = [];
-  objects.push(block('Ground', [0, -0.5, 0], [40, 1, 40], GRASS));
-
-  // stairs, each step 0.6 m higher
-  for (let i = 1; i <= 5; i++) {
-    objects.push(block(`Step ${i}`, [-6 + i * 2, 0.3 * i, -3], [2, 0.6 * i, 3], BRICK));
-  }
-
-  // floating platforms: jump up / run-jump gaps
-  const platforms: Vec3[] = [
-    [8, 1.0, -4],
-    [11.5, 2.0, -6],
-    [8, 3.0, -9],
-    [4, 4.0, -9],
-  ];
-  platforms.forEach((p, i) => objects.push(block(`Platform ${i + 1}`, p, [3, 0.5, 3], STONE)));
-
-  // crates
-  objects.push(block('Crate 1', [-3, 0.5, 4], [1, 1, 1], CRATE));
-  objects.push(block('Crate 2', [-4, 0.5, 4], [1, 1, 1], CRATE));
-  objects.push(block('Crate 3', [-3.5, 1.5, 4], [1, 1, 1], CRATE));
-
-  // crouch tunnel: 1.3 m clearance (standing height is 1.8, crouch height 1.1)
-  objects.push(block('Tunnel wall L', [-8.25, 0.9, 8], [0.5, 1.8, 3], WOOD));
-  objects.push(block('Tunnel wall R', [-5.75, 0.9, 8], [0.5, 1.8, 3], WOOD));
-  objects.push(block('Tunnel roof', [-7, 1.55, 8], [3, 0.5, 3], WOOD));
-
-  // a ramp to walk up (the player follows slopes up to its Max slope) and a rock to climb around
-  const stone = { texture: ATLAS, col: STONE[0], row: STONE[1] };
-  objects.push(createBlock('Ramp', [4, 0.9, 5], wedgeMesh([3, 1.8, 6]), stone));
-  const rock = rockMesh(5, 2.6);
-  objects.push(createBlock('Rock', [-12, -meshBounds(rock).min[1], 0], rock, stone));
-
-  // tall wall (camera collision test)
-  objects.push(block('Wall', [0, 3, -14], [10, 6, 1], STONE));
-
-  // a lift that rides 4 m up and down, with a ledge to step off onto
-  const lift = block('Lift', [-15, 0.25, -5], [3, 0.5, 3], STONE);
-  lift.rules = presetRules('platform', newId);
-  const ride = lift.rules[0]!.actions[0]!;
-  if (ride.type === 'patrol') ride.offset = [0, 4, 0];
-  objects.push(lift);
-  objects.push(block('Ledge', [-18, 2.25, -5], [3, 0.5, 3], STONE));
-
-  // ---- game logic: coins to collect, a key, a locked door, an apple, a checkpoint and a hazard
-  const pickup = (kind: ItemKind, preset: PresetKind, name: string, position: Vec3): LevelModelInstance => ({
-    id: newId(),
-    name,
-    kind: 'model',
-    modelId: ITEM_MODEL_IDS[kind],
-    position,
-    rotation: [0, 0, 0],
-    scale: [1, 1, 1],
-    animation: kind === 'flag' ? null : 'spin',
-    animationSpeed: 1,
-    collide: false,
-    rules: presetRules(preset, newId),
-  });
-  for (const [i, z] of [5, 3.2, 1.4].entries()) objects.push(pickup('coin', 'coin', `Coin ${i + 1}`, [0, 0, z]));
-  objects.push(pickup('coin', 'coin', 'Coin 4', [8, 1.25, -4]));
-  objects.push(pickup('coin', 'coin', 'Coin 5', [11.5, 2.25, -6]));
-  objects.push(pickup('coin', 'coin', 'Coin 6', [8, 3.25, -9]));
-  objects.push(pickup('key', 'key', 'Key', [4, 4.25, -9]));
-  objects.push(pickup('apple', 'apple', 'Apple', [-10, 0, 4]));
-  objects.push(pickup('flag', 'checkpoint', 'Checkpoint', [-3, 0, 1]));
-
-  // the goal: one more platform above the last one, with a trophy on it
-  objects.push(block('Platform 5', [0, 5, -10.5], [3, 0.5, 3], STONE));
-  const goal = pickup('trophy', 'goal', 'Goal', [0, 5.25, -10.5]);
-  goal.scale = [1.5, 1.5, 1.5];
-  objects.push(goal);
-
-  // the tunnel's far end is closed by a door that wants a key; three coins wait behind it
-  const door = block('Door', [-7, 0.65, 6.4], [2, 1.3, 0.3], WOOD);
-  door.rules = presetRules('door', newId);
-  objects.push(door);
-  for (const [i, z] of [4.5, 3.5, 2.5].entries()) objects.push(pickup('coin', 'coin', `Coin ${i + 7}`, [-7, 0, z]));
-
-  // a sign by the start that explains the game when Interact (E) is pressed next to it
-  const sign = block('Sign', [2.5, 0.7, 6.5], [1.1, 1.4, 0.15], WOOD);
-  sign.rules = presetRules('sign', newId);
-  const say = sign.rules[0]!.actions[0]!;
-  if (say.type === 'message') {
-    say.text = 'Collect the coins and the key, open the door and reach the trophy on top!';
-    say.seconds = 6;
-  }
-  objects.push(sign);
-
-  const hazard = block('Hazard', [6, 0.06, 2], [2, 0.12, 2], null, false);
-  hazard.tile = { texture: ITEMS_ATLAS, col: TILE.hazard, row: 0 };
-  hazard.rules = presetRules('hazard', newId);
-  objects.push(hazard);
-  return objects;
-}
-
 /**
  * 2: the player is the built-in humanoid by default. 3: the humanoid's skin has its own layout.
  * 4: the player is 1.8 m tall by default. 5: a project has a list of levels, each with its own spawn.
@@ -754,6 +646,8 @@ export function defaultLevel(): LevelObject[] {
  * blocks of the first prop set were taken out again. 8: the building kit and the modeled trees are in
  * every project. 9: the Slime and Villager models, and a glide pose for the humanoid. 10: the models that
  * come as files (assets/models) are in every project. 11: the humanoid was rebuilt (new parts, bone names and skins).
+ * (Of all the models of versions 6 to 10 only the Slime and the Villager are still built in: a new project
+ * is blank, and the props, the kit and the models of files are not added to older projects any more.)
  * 12: the humanoid has no nose and its hair is a part of its own; there is a female build as well.
  * 13: the characters got a smaller, squarer head (a new layout, so the skins changed too).
  * 14: the built-in models were redrawn as cubes and quads only (the Hytale modeling guide); the characters too.
@@ -766,35 +660,21 @@ export function createDefaultProject(): Project {
     settings: defaultSettings(),
     player: defaultPlayer(),
     textures: [],
-    models: [
-      createHumanoidModel(newId),
-      createHumanoidModel(newId, HUMANOID_FEMALE_ID),
-      createItemModel('coin', newId),
-      createItemModel('key', newId),
-      createItemModel('apple', newId),
-      createItemModel('flag', newId),
-      createItemModel('trophy', newId),
-      ...builtInPropModels(newId),
-      ...builtInKitModels(newId),
-      ...builtInAssetModels(),
-    ],
-    variables: [
-      ...missingVariables([], presetVariables('coin'), newId),
-      ...missingVariables([], presetVariables('key'), newId),
-      ...missingVariables([], presetVariables('apple'), newId),
-    ],
+    // only the characters: the two humanoids and the Slime and Villager. The pickups (coin, key, ...) are put in
+    // when their game object is placed (ensurePresetAssets)
+    models: [createHumanoidModel(newId), createHumanoidModel(newId, HUMANOID_FEMALE_ID), ...builtInPropModels(newId)],
+    variables: [],
     sounds: Object.values(SOUND_IDS)
       .map((id) => builtInSound(id))
       .filter((s): s is SoundAsset => s !== null),
-    levels: [createLevelData('Level 1', defaultLevel(), [0, 0.05, 8], 180)],
+    levels: [createLevelData('Level 1', emptyLevelObjects())],
     prefabs: builtInPrefabs(newId),
   };
 }
 
 /**
- * A fresh copy of a built-in model by its id (the humanoids, a pickup, a prop, a piece of the kit or a model of
- * assets/models), or null when there is no such model. For previews of game objects whose model is not in the
- * project yet.
+ * A fresh copy of a built-in model by its id (the humanoids, a pickup, the Slime or the Villager), or null when
+ * there is no such model. For previews of game objects whose model is not in the project yet.
  */
 export function builtInModelById(id: string): Model | null {
   if (HUMANOID_IDS.includes(id)) return createHumanoidModel(newId, id);
@@ -803,25 +683,17 @@ export function builtInModelById(id: string): Model | null {
   }
   const prop = PROP_KINDS.find((k) => propModelId(k) === id);
   if (prop) return createPropModel(prop as PropKind, newId);
-  const kit = KIT_KINDS.find((k) => kitModelId(k) === id);
-  if (kit) return createKitModel(kit as KitKind, newId);
-  return builtInAssetModels().find((m) => m.id === id) ?? null;
-}
-
-/** The models of assets/models, made valid. */
-export function builtInAssetModels(): Model[] {
-  return rawAssetModels().map((raw) => normalizeModel(raw as Partial<Model>));
+  return null;
 }
 
 export function createLevelData(name: string, objects: LevelObject[], spawn: Vec3 = [0, 0.05, 0], spawnYaw = 180, sky = DEFAULT_SKY): LevelData {
   return { id: newId(), name, objects, spawn: [...spawn], spawnYaw, sky, look: normalizeLook(null) };
 }
 
-/** A new empty level: a flat ground to stand on. */
+/** A new empty level: just a flat ground to stand on, and nothing else. */
 export function emptyLevelObjects(): LevelObject[] {
   return [block('Ground', [0, -0.5, 0], [30, 1, 30], [3, 16])];
 }
-
 
 /**
  * Make sure the project has what a preset needs: its variables and, for pickups, its model. Returns the
@@ -996,7 +868,7 @@ export function normalizeProject(raw: unknown): Project {
     };
     for (const a of player.attachments) a.bone = renamed[a.bone] ?? a.bone;
   }
-  // version 14: the built-in props, kit, pickups and demo models were redrawn as cubes and quads only. A saved copy
+  // version 14: the built-in models were redrawn as cubes and quads only. A saved copy
   // that is still exactly the old built-in one (same shapes, same texture) is replaced; one the user changed stays.
   if (rawVersion < 14) {
     for (let i = 0; i < models.length; i++) {
@@ -1018,25 +890,8 @@ export function normalizeProject(raw: unknown): Project {
     if (player.cameraDistance === 4.5) player.cameraDistance = base.player.cameraDistance;
   }
 
-  // the built-in props arrived with version 6: older projects get them once (and may delete them again)
-  if (rawVersion < 6) {
-    const have = new Set(models.map((m) => m.id));
-    for (const m of builtInPropModels(newId)) if (!have.has(m.id)) models.push(m);
-  }
-
-  // the building kit and modeled trees arrived with version 8
-  if (rawVersion < 8) {
-    const have = new Set(models.map((m) => m.id));
-    for (const m of builtInKitModels(newId)) if (!have.has(m.id)) models.push(m);
-  }
-
-  // version 10: the models that come as files
-  if (rawVersion < 10) {
-    const have = new Set(models.map((m) => m.id));
-    for (const m of builtInAssetModels()) if (!have.has(m.id)) models.push(m);
-  }
-
-  // version 9: the characters of the prop set, and a gliding pose for the built-in humanoid
+  // version 9: the characters of the prop set, and a gliding pose for the built-in humanoid. (The props, the
+  // building kit and the models of files that older versions put in every project are not added any more.)
   if (rawVersion < 9) {
     const have = new Set(models.map((m) => m.id));
     for (const kind of ['slime', 'villager']) {

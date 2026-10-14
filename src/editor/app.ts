@@ -9,6 +9,7 @@ import {
   type Prefab,
   type Vec3,
   createBlock,
+  createDefaultProject,
   createModelInstance,
   ensurePresetAssets,
   newId,
@@ -29,8 +30,6 @@ import { DEFAULT_EXPORT_OPTIONS, exportGame } from './exportGame';
 import { openExportDialog } from './ui/exportDialog';
 import { shortcutSheet } from './ui/shortcutSheet';
 import { makeSplitter } from './ui/splitter';
-import { openStartDialog } from './ui/startDialog';
-import { createBlankProject, createDemoProject } from '../core/demo';
 import { AssetsPanel } from './panels/assetsPanel';
 import type { LeftTab, Mode, PanelHost } from './panels/host';
 import { buildMultiInspector, buildBlockInspector, buildModelInstanceInspector, buildPrefabInspector } from './panels/objectInspectors';
@@ -178,19 +177,13 @@ export class EditorApp {
     return !this.files.state().dirty || confirm(`${question}\n\nThe current project has changes that are not saved to a file.`);
   }
 
+  /** A new project is the blank one: a flat ground, the characters, and nothing else. */
   private async newProject(): Promise<void> {
     if (!this.confirmDiscard('Start a new project?')) return;
-    this.showStartDialog(false);
-  }
-
-  /** Ask what to start with: an empty project or the example game. */
-  showStartDialog(firstTime = true): void {
-    openStartDialog((choice) => {
-      this.viewport.stop();
-      this.updatePlayUi();
-      this.store.setProject(choice === 'example' ? createDemoProject() : createBlankProject());
-      void this.files.detach();
-    }, firstTime);
+    this.viewport.stop();
+    this.updatePlayUi();
+    this.store.setProject(createDefaultProject());
+    void this.files.detach();
   }
 
   private async openProject(fallbackInput: HTMLInputElement): Promise<void> {

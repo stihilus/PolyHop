@@ -37,9 +37,6 @@ async function main(): Promise<void> {
     e.preventDefault();
     e.returnValue = '';
   });
-  // nothing saved yet: the first visit. Ask whether to start blank or from the example.
-  if (!saved && files.state().name === null) app.showStartDialog(true);
-
   // Backup autosave (debounced) to IndexedDB on any change except selection. The project file itself
   // is only written when the user presses Save (see FileSession).
   let timer: number | undefined;

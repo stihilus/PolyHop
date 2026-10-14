@@ -1,4 +1,4 @@
-// A small builder for the models that ship with the editor (props, building kit, trees): boxes and ready-made
+// A small builder for the models that ship with the editor (the pickups, the Slime and the Villager): boxes and ready-made
 // meshes textured with the tiles of one atlas, grouped into bones and animations. The built-in models are made
 // of cubes and quads only (see hytaleStyle.ts): round things are made of turned cubes, with `round`, `clump`
 // and `ringOf` below, never of cylinders, spheres or wedges.

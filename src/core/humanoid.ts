@@ -18,7 +18,7 @@ export const HUMANOID_IDS: readonly string[] = [HUMANOID_ID, HUMANOID_FEMALE_ID]
 export const HUMANOID_SKIN = 'Character-Skin.png';
 /** Skin template: every body part in its own flat color, for painting new skins. */
 export const HUMANOID_TEMPLATE = 'Character-Template.png';
-/** The explorer skin made for the demo project. */
+/** The explorer skin: a green cap, a red scarf and a tunic. */
 export const HUMANOID_EXPLORER = 'Character-Explorer.png';
 export const HUMANOID_FEMALE_SKIN = 'Character-Female-Skin.png';
 export const HUMANOID_FEMALE_TEMPLATE = 'Character-Female-Template.png';

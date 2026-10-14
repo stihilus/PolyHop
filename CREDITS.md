@@ -19,7 +19,7 @@ SIL Open Font License 1.1, the license text is in `assets/fonts/OFL.txt`.
 ## Art and sound made for PolyHop
 
 The tile atlases `Kit-16`, `Props-16`, `Items-16`, `Plants-16` and `Demo-16`, the character skins and rig, the
-models in `assets/models`, the splash picture of the demo and every built-in sound effect and music loop are made by
+built-in models and every built-in sound effect and music loop are made by
 the scripts in `tools/` (and by the generators in `src/core/sfx.ts` and `src/core/music.ts`), so there is nothing to
 attribute for them.
 

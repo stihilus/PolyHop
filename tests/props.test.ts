@@ -10,6 +10,7 @@ import {
   propModelId,
   propTilePos,
 } from '../src/core/props';
+import { HUMANOID_FEMALE_ID, HUMANOID_ID } from '../src/core/humanoid';
 import { createBlock, createDefaultProject, createModel, createModelInstance, normalizeModel, normalizeProject } from '../src/core/types';
 
 let n = 0;
@@ -19,12 +20,11 @@ const ATLAS_W = 256;
 const ATLAS_H = 80;
 
 describe('built-in props', () => {
-  it('there is a good number of them, with unique ids and names', () => {
+  it('there are two of them, the Slime and the Villager, with unique ids and names', () => {
     const models = builtInPropModels(ids);
-    expect(models.length).toBeGreaterThanOrEqual(40);
-    expect(new Set(models.map((m) => m.id)).size).toBe(models.length);
-    expect(new Set(models.map((m) => m.name)).size).toBe(models.length);
-    expect(models.every((m) => m.id.startsWith('prop-'))).toBe(true);
+    expect(models.map((m) => m.id)).toEqual(['prop-slime', 'prop-villager']);
+    expect(models.map((m) => m.name)).toEqual(['Slime', 'Villager']);
+    expect(PROP_KINDS.map(propModelId)).toEqual(['prop-slime', 'prop-villager']);
   });
 
   it('every prop is a valid model on the props atlas, with all UVs inside it', () => {
@@ -71,13 +71,11 @@ describe('built-in props', () => {
   });
 
   it('the animated ones have what they promise', () => {
-    const chest = createPropModel('chest', ids);
-    expect(chest.clips.map((c) => c.name)).toEqual(['open', 'close']);
-    expect(chest.bones.map((b) => b.name)).toEqual(['Base', 'Lid']);
-    expect(createPropModel('torch', ids).clips.map((c) => c.name)).toEqual(['flicker']);
-    expect(createPropModel('campfire', ids).clips.map((c) => c.name)).toEqual(['flicker']);
-    expect(createPropModel('banner', ids).clips.map((c) => c.name)).toEqual(['sway']);
-    expect(createPropModel('ruby', ids).clips.map((c) => c.name)).toEqual(['spin']);
+    const slime = createPropModel('slime', ids);
+    expect(slime.clips.map((c) => c.name)).toEqual(['hop']);
+    expect(slime.bones.map((b) => b.name)).toEqual(['Body']);
+    const villager = createPropModel('villager', ids);
+    expect(villager.clips.map((c) => c.name)).toEqual(['idle']);
   });
 
   it('the tile list matches the atlas: 80 tiles, 16 to a row', () => {
@@ -86,13 +84,15 @@ describe('built-in props', () => {
     expect(propTilePos('stone')).toEqual({ col: 0, row: 1 });
     expect(propTilePos('chest_front')).toEqual({ col: 0, row: 2 });
     expect(propTilePos('poppy')).toEqual({ col: 0, row: 4 });
+    // the tiles of the models that are gone stay in the atlas
+    expect(PROP_TILE_NAMES).toContain('ruby');
   });
 });
 
 describe('what is not in the set', () => {
-  it('has no trees and no blocks made of plain cubes', () => {
+  it('has no furniture, plants or blocks: only the two characters', () => {
     const names = builtInPropModels(ids).map((m) => m.name.toLowerCase());
-    for (const word of ['oak', 'pine tree', 'birch', 'ore', 'obsidian', 'gold block', 'lava block']) {
+    for (const word of ['oak', 'pine tree', 'birch', 'ore', 'obsidian', 'gold block', 'lava block', 'chest', 'barrel', 'torch']) {
       expect(names.some((n) => n.includes(word)), word).toBe(false);
     }
     for (const id of RETIRED_PROP_IDS) expect(PROP_KINDS.map(propModelId)).not.toContain(id);
@@ -105,21 +105,23 @@ describe('what is not in the set', () => {
   });
 });
 
-describe('props in projects', () => {
-  it('a new project has all of them in its Models', () => {
+describe('the characters in projects', () => {
+  it('a new project has them in its Models, next to the two humanoids and nothing else', () => {
     const p = createDefaultProject();
-    for (const kind of PROP_KINDS) expect(p.models.some((m) => m.id === propModelId(kind))).toBe(true);
+    expect(p.models.map((m) => m.id)).toEqual([HUMANOID_ID, HUMANOID_FEMALE_ID, 'prop-slime', 'prop-villager']);
   });
 
   it('an older project gets them once and keeps what it deleted afterwards', () => {
     const old = normalizeProject({ version: 5, models: [] });
     for (const kind of PROP_KINDS) expect(old.models.some((m) => m.id === propModelId(kind))).toBe(true);
-    // saved again at the current version: a deleted prop is not brought back
+    // the props, the kit and the models of files that older versions put in every project are not added any more
+    expect(old.models.some((m) => m.id.startsWith('kit-') || m.id.startsWith('demo-') || m.id === 'prop-chest')).toBe(false);
+    // saved again at the current version: a deleted character is not brought back
     const pruned = JSON.parse(JSON.stringify(old));
-    pruned.models = pruned.models.filter((m: { id: string }) => m.id !== propModelId('chest'));
+    pruned.models = pruned.models.filter((m: { id: string }) => m.id !== propModelId('slime'));
     const back = normalizeProject(pruned);
-    expect(back.models.some((m) => m.id === propModelId('chest'))).toBe(false);
-    expect(back.models.some((m) => m.id === propModelId('barrel'))).toBe(true);
+    expect(back.models.some((m) => m.id === propModelId('slime'))).toBe(false);
+    expect(back.models.some((m) => m.id === propModelId('villager'))).toBe(true);
   });
 
   it('an older project loses the retired props it does not use, and keeps the ones it placed', () => {
@@ -144,12 +146,12 @@ describe('props in projects', () => {
     expect(current.models.map((m) => m.id)).toContain('prop-oak-tree');
   });
 
-  it('edited props are not overwritten by the migration', () => {
+  it('a character the user edited is not overwritten by the migration', () => {
     const old = normalizeProject({ version: 5, models: [] });
-    old.models.find((m) => m.id === propModelId('crate'))!.name = 'My crate';
-    old.version = 5; // pretend it was saved before the props existed
+    old.models.find((m) => m.id === propModelId('slime'))!.name = 'My slime';
+    old.version = 5; // pretend it was saved before the characters existed
     const again = normalizeProject(JSON.parse(JSON.stringify(old)));
-    expect(again.models.filter((m) => m.id === propModelId('crate'))).toHaveLength(1);
-    expect(again.models.find((m) => m.id === propModelId('crate'))!.name).toBe('My crate');
+    expect(again.models.filter((m) => m.id === propModelId('slime'))).toHaveLength(1);
+    expect(again.models.find((m) => m.id === propModelId('slime'))!.name).toBe('My slime');
   });
 });

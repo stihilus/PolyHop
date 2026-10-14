@@ -4,7 +4,7 @@
   src/core/humanoid.model.json          the male character: its parts, joints (bones) and UV layout
   src/core/humanoid-female.model.json   the female character (the same bones, another build and another layout)
   assets/textures/Character-Skin.png            the default male skin (a plain outfit)
-  assets/textures/Character-Explorer.png        the explorer of the demo: a green cap, a red scarf, a tunic
+  assets/textures/Character-Explorer.png        the explorer skin: a green cap, a red scarf, a tunic
   assets/textures/Character-Template.png       every body part in its own color, for painting new skins
   assets/textures/Character-Female-Skin.png     the default female skin
   assets/textures/Character-Female-Explorer.png an adventurer: a headband, a green vest, boots

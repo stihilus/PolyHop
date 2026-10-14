@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { boxMesh } from '../src/core/mesh';
-import { type LevelObject, createBlock, createDefaultProject, createModel, createModelInstance } from '../src/core/types';
+import { type LevelObject, createBlock, createModel, createModelInstance } from '../src/core/types';
 import { Store } from '../src/editor/store';
 import { multiObjectTarget } from '../src/editor/shapeTargets';
 import type { TransformDelta } from '../src/editor/gizmo';
+import { createTestProject } from './helpers';
 
 const delta = (over: Partial<TransformDelta> = {}): TransformDelta => ({
   translate: new THREE.Vector3(),
@@ -26,7 +27,7 @@ const hooks = () => {
 
 describe('selecting several objects', () => {
   const make = () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     return { store, ids: store.objects.slice(0, 5).map((o) => o.id) };
   };
 
@@ -67,7 +68,7 @@ describe('selecting several objects', () => {
   });
 
   it('duplicates all of them, selects the copies and keeps rules pointing inside the copies', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     const door = store.objects.find((o) => o.name === 'Door')!;
     const coin = store.objects.find((o) => o.name === 'Coin 1')!;
     coin.rules = [{ id: 'r1', event: 'touch', conditions: [], actions: [{ type: 'move', target: door.id, offset: [0, 1, 0], seconds: 1 }] }];

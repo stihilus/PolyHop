@@ -14,15 +14,16 @@ import {
   savePrefabFrom,
 } from '../src/core/prefabs';
 import { PRESETS } from '../src/core/presets';
-import { type LevelBlock, createBlock, createDefaultProject, normalizeProject } from '../src/core/types';
+import { type LevelBlock, createBlock, normalizeProject } from '../src/core/types';
 import { Store } from '../src/editor/store';
+import { createTestProject } from './helpers';
 
 let n = 0;
 const ids = () => `p${++n}`;
 
 describe('built-in game objects as assets', () => {
   it('there is one for every preset, with its rules, in every new project', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     expect(p.prefabs.map((x) => x.id)).toEqual(PRESETS.map((x) => builtInPrefabId(x.kind)));
     for (const kind of PRESETS.map((x) => x.kind)) {
       const prefab = p.prefabs.find((x) => x.id === builtInPrefabId(kind))!;
@@ -151,7 +152,7 @@ describe('assets in a project file', () => {
   });
 
   it('keeps edits to a built-in one and your own assets, through a save and a load', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     const door = p.prefabs.find((x) => x.base === 'door')!;
     door.name = 'Gate';
     (door.object as LevelBlock).color = '#00ff00';
@@ -166,7 +167,7 @@ describe('assets in a project file', () => {
   });
 
   it('drops broken assets, zeroes template positions and forgets links to missing assets', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     const raw = JSON.parse(JSON.stringify(p));
     raw.prefabs.push({ id: 'junk' }, { id: 'bad', object: { kind: 'spaceship' } });
     const own = raw.prefabs.find((x: { base: string | null }) => x.base === 'sign');
@@ -181,7 +182,7 @@ describe('assets in a project file', () => {
   });
 
   it('a block placed from an asset keeps its link in the file', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     const obj = instantiatePrefab(p.prefabs.find((x) => x.base === 'door')!, [0, 0, 0], ids);
     p.levels[0]!.objects.push(obj);
     const back = normalizeProject(JSON.parse(JSON.stringify(p)));
@@ -198,7 +199,7 @@ describe('assets in the editor store', () => {
   };
 
   it('updating the placed copies reaches every level', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     const a = place(store, 'door', 1);
     store.addLevel('Two');
     const b = place(store, 'door', 2);
@@ -211,7 +212,7 @@ describe('assets in the editor store', () => {
   });
 
   it('makes an asset of an object and links it back', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     const door = place(store, 'door', 0);
     door.rules = [];
     const id = store.makePrefab(door.id)!;
@@ -223,7 +224,7 @@ describe('assets in the editor store', () => {
   });
 
   it('only your own assets can be deleted, and placed objects stay without the link', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     expect(store.removePrefab('prefab-coin')).toBe(false);
     const door = place(store, 'door', 0);
     const id = store.makePrefab(door.id)!;
@@ -232,7 +233,7 @@ describe('assets in the editor store', () => {
   });
 
   it('a built-in one can be reset', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     const prefab = store.getPrefab('prefab-door')!;
     prefab.name = 'Gate';
     prefab.object.rules = [];
@@ -244,7 +245,7 @@ describe('assets in the editor store', () => {
   });
 
   it('save to asset and update from asset work on one object', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     const door = place(store, 'door', 0) as LevelBlock;
     door.mesh = boxMesh([3, 3, 3]);
     door.color = '#abcdef';
@@ -258,7 +259,7 @@ describe('assets in the editor store', () => {
   });
 
   it('deleting a model takes your own assets of it away but keeps the built-in ones', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     const coin = place(store, 'coin', 0);
     const own = store.makePrefab(coin.id)!;
     expect(store.getPrefab(own)).toBeDefined();

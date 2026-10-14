@@ -13,7 +13,6 @@ import { presetRules, presetVariables } from '../src/core/presets';
 import {
   PROJECT_VERSION,
   createBlock,
-  createDefaultProject,
   createLevelData,
   defaultPlayer,
   ensurePresetAssets,
@@ -23,6 +22,7 @@ import { boxMesh } from '../src/core/mesh';
 import { Store } from '../src/editor/store';
 import { LogicRuntime } from '../src/runtime/logic';
 import type { Box } from '../src/runtime/physics';
+import { createTestProject } from './helpers';
 
 let n = 0;
 const ids = () => `x${++n}`;
@@ -33,7 +33,7 @@ const none = () => undefined;
 
 describe('levels in the project', () => {
   it('a new project has one level with its own spawn point', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     expect(p.version).toBe(PROJECT_VERSION);
     expect(p.levels).toHaveLength(1);
     expect(p.levels[0]!.spawn).toEqual([0, 0.05, 8]);
@@ -55,7 +55,7 @@ describe('levels in the project', () => {
   });
 
   it('keeps several levels with unique ids through a save and a load', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     p.levels.push(createLevelData('Cave', [createBlock('Floor', [0, 0, 0], boxMesh([4, 1, 4]), null)], [1, 2, 3], 45));
     const dup = JSON.parse(JSON.stringify(p));
     dup.levels[1].id = dup.levels[0].id; // a hand-edited clash
@@ -72,7 +72,7 @@ describe('levels in the project', () => {
   });
 
   it('the default level has a goal that ends the game', () => {
-    const p = createDefaultProject();
+    const p = createTestProject();
     const goal = p.levels[0]!.objects.find((o) => o.name === 'Goal')!;
     expect(goal.kind === 'model' && goal.modelId).toBe(ITEM_MODEL_IDS.trophy);
     expect(goal.rules[0]!.actions.some((a) => a.type === 'end')).toBe(true);
@@ -82,7 +82,7 @@ describe('levels in the project', () => {
 
 describe('the level list in the editor', () => {
   it('adds, switches, renames, reorders and deletes levels', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     expect(store.levelIndex).toBe(0);
     store.addLevel('Second');
     expect(store.project.levels.map((l) => l.name)).toEqual(['Level 1', 'Second']);
@@ -101,7 +101,7 @@ describe('the level list in the editor', () => {
   });
 
   it('a copied level has its own object ids and its rules point inside the copy', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     const door = store.objects.find((o) => o.name === 'Door')!;
     const lever = store.objects.find((o) => o.name === 'Coin 1')!;
     lever.rules = [rule({ event: 'touch', actions: [{ type: 'move', target: door.id, offset: [0, 1, 0], seconds: 1 }] })];
@@ -116,7 +116,7 @@ describe('the level list in the editor', () => {
   });
 
   it('undo goes back across a level being added', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     store.addLevel('Two');
     expect(store.project.levels).toHaveLength(2);
     store.undoLevel();
@@ -127,7 +127,7 @@ describe('the level list in the editor', () => {
   });
 
   it('a variable rename reaches the rules of every level', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     store.addLevel();
     store.objects.push(createBlock('Sign', [0, 0, 0], boxMesh([1, 1, 1]), null));
     store.objects[store.objects.length - 1]!.rules = [
@@ -143,7 +143,7 @@ describe('the level list in the editor', () => {
   });
 
   it('deleting a level sends exits that led there to the next one', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     store.addLevel('B');
     store.addLevel('C');
     const b = store.project.levels[1]!;
@@ -358,7 +358,7 @@ describe('the interact event', () => {
 
 describe('the sky of a level', () => {
   it('has a default, survives a save and is changed with undo support', () => {
-    const store = new Store(createDefaultProject());
+    const store = new Store(createTestProject());
     expect(store.level.sky).toBe('#8fc0ee');
     store.setSky('#202840');
     expect(store.level.sky).toBe('#202840');
