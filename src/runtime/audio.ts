@@ -28,13 +28,23 @@ export class AudioEngine {
   private master: GainNode | null = null;
   private sounds = new Map<string, SoundAsset>();
   private buffers = new Map<string, Promise<AudioBuffer | null>>();
+  private recipes = new Map<string, string>();
   private music: { source: AudioBufferSourceNode; gain: GainNode; id: string; startedAt: number; duration: number } | null = null;
   private volume = 1;
   muted = false;
 
+  /**
+   * What a sound is made from (the volume is applied when it plays, so it is not a part of this). The Audio tab edits
+   * the objects of the project in place, so the engine cannot tell an edit by comparing with the object it was given
+   * last time: it keeps this text of what each buffer was made from.
+   */
+  private recipe(s: SoundAsset): string {
+    if (s.kind === 'file' && s.file) return `file|${s.file.mime}|${s.file.data.length}|${s.file.data.slice(0, 48)}|${s.file.data.slice(-48)}`;
+    return JSON.stringify([s.kind, s.seed ?? null, s.sfx ?? null, s.music ?? null]);
+  }
+
   /** Give the engine the project's sounds (call again after they were edited). */
   setSounds(sounds: SoundAsset[], masterVolume: number): void {
-    const old = this.sounds;
     this.sounds = new Map(sounds.map((s) => [s.id, s] as const));
     // the voices of the characters are always there, also in a project that was made before they existed
     for (const id of TALK_VOICES) {
@@ -42,10 +52,18 @@ export class AudioEngine {
       if (voice) this.sounds.set(id, voice);
     }
     this.volume = masterVolume;
-    // a sound that was edited or removed is rendered again next time
-    for (const [id, s] of old) {
-      const now = this.sounds.get(id);
-      if (!now || JSON.stringify(now) !== JSON.stringify(s)) this.buffers.delete(id);
+    // a sound that was edited or removed is made again next time it is needed
+    for (const id of [...this.recipes.keys()]) {
+      if (!this.sounds.has(id)) {
+        this.recipes.delete(id);
+        this.buffers.delete(id);
+      }
+    }
+    for (const [id, s] of this.sounds) {
+      const recipe = this.recipe(s);
+      const had = this.recipes.get(id);
+      if (had !== undefined && had !== recipe) this.buffers.delete(id);
+      this.recipes.set(id, recipe);
     }
     this.applyVolume();
   }
@@ -188,5 +206,6 @@ export class AudioEngine {
     this.ctx = null;
     this.master = null;
     this.buffers.clear();
+    this.recipes.clear();
   }
 }
