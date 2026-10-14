@@ -2020,3 +2020,11 @@ input[type='search']:focus {
 .picture-row-controls .muted {
   min-width: 34px;
 }
+
+.pad-table .controls-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+}
+.pad-buttons {
+  color: var(--muted);
+  text-align: right;
+}

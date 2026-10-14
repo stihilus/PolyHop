@@ -1,3 +1,4 @@
+import { GAMEPAD_HELP, GAMEPAD_NAMES_NOTE } from '../../core/gamepad';
 import { ACTION_LABELS, keyLabel } from '../../core/keys';
 import {
   DEFAULT_MENU,
@@ -412,6 +413,9 @@ export function openSettingsDialog(store: Store): void {
     }),
   );
   const splashPanel = el('div', { class: 'settings-panel' }, el('div', { class: 'form-section', text: 'Splash screen' }), splashBox);
+  // what the buttons of a gamepad do (the same for every game; a Sony DualShock / DualSense or an Xbox pad)
+  const padTable = el('div', { class: 'controls-table pad-table' });
+  for (const h of GAMEPAD_HELP) padTable.append(el('div', { class: 'controls-row' }, el('span', { text: h.action }), el('span', { class: 'pad-buttons', text: h.buttons })));
   const controlsPanel = el(
     'div',
     { class: 'settings-panel' },
@@ -432,6 +436,12 @@ export function openSettingsDialog(store: Store): void {
         },
       }),
     ),
+    el('div', { class: 'form-section', text: 'Gamepad' }),
+    padTable,
+    el('div', {
+      class: 'muted menu-note',
+      text: `${GAMEPAD_NAMES_NOTE} Plug a controller in (or pair it by Bluetooth) and press a button; Play and the exported game use it, and the menu is moved with the D-pad. Turn it off with “Gamepad support” above.`,
+    }),
   );
   const soundPanel = el(
     'div',

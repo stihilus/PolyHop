@@ -3,8 +3,11 @@ import { type FaceTile, sanitizeFaceTile, triangulateFace } from '../core/mesh';
 import { type SculptMode, isTerrainGrid, sculpt as sculptHeights, terrainHeightAt } from '../core/terrain';
 import { degreesFromQuaternion, quaternionFromDegrees, worldPoints } from '../core/shape';
 import type { LevelBlock, LevelData, LevelModelInstance, Vec3 } from '../core/types';
+import { PAD } from '../core/gamepad';
 import { type Environment, createEnvironment } from '../runtime/environment';
 import { Game, type GameStats } from '../runtime/game';
+import { PadReader } from '../runtime/gamepad';
+import { MenuNav } from '../runtime/menuNav';
 import type { TextureLibrary } from '../runtime/textures';
 import { CameraNav } from './cameraNav';
 import { Gizmo, type TransformDelta, type TransformTarget } from './gizmo';
@@ -1064,12 +1067,21 @@ export class Viewport {
     this.playCamera.updateProjectionMatrix();
   }
 
+  private pad = new PadReader();
+  private menuNav = new MenuNav({ layers: () => [this.game.endScreen], blocked: () => false });
+
   private frame = (now: number) => {
     requestAnimationFrame(this.frame);
     const dt = Math.min((now - this.last) / 1000, 0.1);
     this.last = now;
     if (!this.active) return;
 
+    if (this.game.playing && this.store.project.settings.gamepad) {
+      // the gamepad: up / down and Cross on the end screen, and Options leaves the game like Esc does
+      this.pad.poll(dt);
+      this.menuNav.update(this.pad);
+      if (this.pad.pressed(PAD.options) && !this.game.ended) this.onExitRequest?.();
+    }
     this.game.update(dt);
     // the sun's shadows are drawn around where the action is
     if (this.game.playing) {

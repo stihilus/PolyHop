@@ -415,6 +415,27 @@ over what the author set; *Defaults* forgets them.
 a floating stick on the left half to move, dragging the right half to look, and the buttons *Jump*, *Use*
 (interact), *Run*, *Duck*, plus a pause button. Hints say *Use* and *Tap* instead of naming keys.
 
+**Gamepad.** A controller works in Play and in an exported game (a Sony DualShock 4 / DualSense, an Xbox pad ...
+anything the browser gives the standard layout; also on an iPad or iPhone with a Bluetooth pad, and on a PC).
+Connect it and press a button (Safari only lists a pad after the first press). The buttons are named like a
+PlayStation pad and listed in **Project Settings > Controls**, on the menu screen of the game and in its Settings:
+
+| Button | What it does |
+| --- | --- |
+| Left stick or D-pad | move |
+| Right stick | look / turn |
+| Cross (✕) | jump; picks the highlighted entry of a menu or an answer |
+| Square (□) or R2 | run (hold) |
+| Circle (○) or L3 | crouch (hold); goes back in a menu |
+| Triangle (△) | interact / talk |
+| Options | pause, continue, or leave the settings (in the editor's Play: stop) |
+| D-pad up / down | move through a menu or the answers of a question (the left stick does it too); left / right change a slider or a list |
+
+An Xbox pad is the same with Cross = A, Circle = B, Square = X, Triangle = Y. The arrow keys move through the menus too
+(up / down, left / right for sliders, Enter or Space to press) and through the answers of a question (Enter picks).
+When a pad is used the on-screen buttons of a touch screen step aside, and come back with the next touch; the hints
+(*Cross / Triangle: next*) name the pad's buttons. **Project Settings > Controls > Gamepad support** turns it off.
+
 ### Playing
 
 Press **Play**. By default the camera stays **behind the player** and turns with them:

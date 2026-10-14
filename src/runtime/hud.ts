@@ -18,6 +18,7 @@ export class Hud {
   private dialogueShown: HTMLElement | null = null;
   private dialogueRest: HTMLElement | null = null;
   private dialogueAnswers: HTMLElement | null = null;
+  private answerButtons: HTMLButtonElement[] = [];
   private tintEl: HTMLElement | null = null;
   private prompt: HTMLElement;
 
@@ -165,7 +166,8 @@ export class Hud {
 
   /**
    * A conversation box at the bottom: the speaker, the line, and a hint. `answers` turn it into a
-   * question with numbered buttons; `onAnswer` gets the index of the one picked (key 1-4 or a click).
+   * question with numbered buttons; `onAnswer` gets the index of the one picked (key 1-4, a click, or the
+   * D-pad and a button: see `selectAnswer`).
    * `shown` is how many characters can be read at first (the rest appears with `setDialogueShown`); the
    * box already has the size of the whole line, so it does not jump while the words appear.
    */
@@ -216,6 +218,7 @@ export class Hud {
     this.dialogueShown = seen;
     this.dialogueRest = rest;
     this.setDialogueShown(shown);
+    this.answerButtons = [];
     if (answers.length > 0) {
       const list = document.createElement('div');
       Object.assign(list.style, { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' });
@@ -237,11 +240,19 @@ export class Hud {
           onAnswer(i);
         });
         list.append(b);
+        this.answerButtons.push(b);
       });
       // the answers are there, but only readable once the question has been read
       list.style.visibility = shown >= text.length ? 'visible' : 'hidden';
       this.dialogueAnswers = list;
       box.append(list);
+      this.selectAnswer(0);
+      if (hint) {
+        const h = document.createElement('div');
+        h.textContent = hint;
+        Object.assign(h.style, { color: '#9aa3b2', fontSize: '14px', marginTop: '8px', textAlign: 'right' });
+        box.append(h);
+      }
       // a click on the question shows it all at once
       box.addEventListener('click', onNext);
     } else {
@@ -253,6 +264,16 @@ export class Hud {
     }
     this.root.append(box);
     this.dialogue = box;
+  }
+
+  /** Mark one answer as the one a button would pick (up / down on a gamepad or the keys moves the mark). */
+  selectAnswer(index: number): void {
+    this.answerButtons.forEach((b, i) => {
+      const on = i === index;
+      b.style.background = on ? '#3b4f9a' : '#25305a';
+      b.style.borderColor = on ? '#ffffff' : '#8aa0ff';
+      b.style.boxShadow = on ? '0 0 0 2px #ffffff' : 'none';
+    });
   }
 
   /** Let the first `count` characters of the conversation box be read; the answers show up with the last one. */
@@ -270,6 +291,12 @@ export class Hud {
     this.dialogue?.remove();
     this.dialogue = null;
     this.dialogueShown = this.dialogueRest = this.dialogueAnswers = null;
+    this.answerButtons = [];
+  }
+
+  /** The end screen, while there is one (a gamepad moves through its buttons). */
+  get endScreen(): HTMLElement | null {
+    return this.endLayer;
   }
 
   /** A full-screen message (win screen, game over) with buttons. */

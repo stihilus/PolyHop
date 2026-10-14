@@ -1,4 +1,6 @@
+import { PAD, PAD_AXES } from '../core/gamepad';
 import type { Action, ProjectSettings } from '../core/types';
+import { PadReader } from './gamepad';
 import type { TouchSource } from './touch';
 
 export interface InputFrame {
@@ -15,9 +17,15 @@ export interface InputFrame {
   /** Camera look in "mouse pixels" for this frame (stick input already converted using dt). */
   lookX: number;
   lookY: number;
+  /**
+   * Menu-style steps for a question: -1 up / +1 down, from the forward and back keys, the arrows, the D-pad and the
+   * left stick of a gamepad (the stick and the D-pad repeat while held).
+   */
+  navY: number;
+  /** Enter, or a button that does the job of "yes": Jump, Interact, Cross, Triangle (went down this frame). */
+  confirm: boolean;
 }
 
-const STICK_DEADZONE = 0.2;
 const STICK_LOOK_PIXELS_PER_SEC = 900;
 
 /** Keyboard + mouse + gamepad, mapped through the project's control bindings. */
@@ -27,8 +35,7 @@ export class Input {
   private lookDX = 0;
   private lookDY = 0;
   private dragging = false;
-  private prevPadJump = false;
-  private prevPadInteract = false;
+  private pad = new PadReader();
   private attached = false;
   /** On-screen controls of a phone, when there are any. */
   touch: TouchSource | null = null;
@@ -69,7 +76,20 @@ export class Input {
     this.pressed.clear();
     this.dragging = false;
     this.lookDX = this.lookDY = 0;
+    // a button of the pad that is still held is not a new press
+    this.pad.sync();
   }
+
+  /** A gamepad is plugged in (and the game listens to it). */
+  get padConnected(): boolean {
+    return this.pad.connected;
+  }
+
+  /** The player used the gamepad a moment ago (the hints name its buttons then). */
+  get padActive(): boolean {
+    return this.padRecent > 0;
+  }
+  private padRecent = 0;
 
   private onKeyDown = (e: KeyboardEvent) => {
     if (!this.down.has(e.code)) this.pressed.add(e.code);
@@ -126,42 +146,44 @@ export class Input {
     let lookX = this.lookDX;
     let lookY = this.lookDY;
 
-    if (settings.gamepad) {
-      const pad = Array.from(navigator.getGamepads?.() ?? []).find((g) => g && g.connected);
-      if (pad) {
-        const lx = pad.axes[0] ?? 0;
-        const ly = pad.axes[1] ?? 0;
-        const mag = Math.hypot(lx, ly);
-        if (mag > STICK_DEADZONE) {
-          const scale = Math.min(1, (mag - STICK_DEADZONE) / (1 - STICK_DEADZONE)) / mag;
-          moveX += lx * scale;
-          moveY += -ly * scale;
-          const l2 = Math.hypot(moveX, moveY);
-          if (l2 > 1) {
-            moveX /= l2;
-            moveY /= l2;
-          }
-        }
-        const rx = pad.axes[2] ?? 0;
-        const ry = pad.axes[3] ?? 0;
-        if (Math.hypot(rx, ry) > STICK_DEADZONE) {
-          lookX += rx * STICK_LOOK_PIXELS_PER_SEC * dt;
-          lookY += ry * STICK_LOOK_PIXELS_PER_SEC * dt;
-        }
-        const padJump = !!pad.buttons[0]?.pressed; // A / Cross
-        if (padJump && !this.prevPadJump) jumpPressed = true;
-        this.prevPadJump = padJump;
-        jumpHeld ||= padJump;
-        run ||= !!pad.buttons[2]?.pressed || !!pad.buttons[7]?.pressed; // X / RT
-        crouch ||= !!pad.buttons[1]?.pressed || !!pad.buttons[10]?.pressed; // B / L3
-        const padInteract = !!pad.buttons[3]?.pressed; // Y / Triangle
-        if (padInteract && !this.prevPadInteract) interactPressed = true;
-        this.prevPadInteract = padInteract;
+    let navY = (this.anyPressed(c.back) ? 1 : 0) - (this.anyPressed(c.forward) ? 1 : 0);
+    let confirm = this.pressed.has('Enter') || this.pressed.has('NumpadEnter');
+    this.pad.poll(dt);
+    if (settings.gamepad && this.pad.connected) {
+      const pad = this.pad;
+      // the left stick and the D-pad walk
+      const [lx, ly] = pad.stick(PAD_AXES.leftX, PAD_AXES.leftY);
+      moveX += lx + (pad.down(PAD.right) ? 1 : 0) - (pad.down(PAD.left) ? 1 : 0);
+      moveY += -ly + (pad.down(PAD.up) ? 1 : 0) - (pad.down(PAD.down) ? 1 : 0);
+      const mag = Math.hypot(moveX, moveY);
+      if (mag > 1) {
+        moveX /= mag;
+        moveY /= mag;
       }
+      // the right stick looks
+      const [rx, ry] = pad.stick(PAD_AXES.rightX, PAD_AXES.rightY);
+      lookX += rx * STICK_LOOK_PIXELS_PER_SEC * dt;
+      lookY += ry * STICK_LOOK_PIXELS_PER_SEC * dt;
+      if (pad.pressed(PAD.cross)) {
+        jumpPressed = true;
+        confirm = true;
+      }
+      jumpHeld ||= pad.down(PAD.cross);
+      run ||= pad.down(PAD.square) || pad.down(PAD.r2);
+      crouch ||= pad.down(PAD.circle) || pad.down(PAD.l3);
+      if (pad.pressed(PAD.triangle)) {
+        interactPressed = true;
+        confirm = true;
+      }
+      if (pad.navY !== 0) navY = pad.navY;
+      if (pad.active) this.padRecent = 3;
     }
+    this.padRecent = Math.max(0, this.padRecent - dt);
+    if (this.anyPressed(c.jump) || this.anyPressed(c.interact)) confirm = true;
 
     if (this.touch) {
       const t = this.touch.sample();
+      if (t.moveX !== 0 || t.moveY !== 0 || t.jumpPressed) this.padRecent = 0;
       moveX += t.moveX;
       moveY += t.moveY;
       const len = Math.hypot(moveX, moveY);
@@ -182,7 +204,7 @@ export class Input {
     ['Digit1', 'Digit2', 'Digit3', 'Digit4'].forEach((code, i) => {
       if (this.pressed.has(code) || this.pressed.has(`Numpad${i + 1}`)) answer = i;
     });
-    const frame: InputFrame = { moveX, moveY, jumpPressed, jumpHeld, run, crouch, interactPressed, answer, lookX, lookY };
+    const frame: InputFrame = { moveX, moveY, jumpPressed, jumpHeld, run, crouch, interactPressed, answer, lookX, lookY, navY, confirm };
     this.pressed.clear();
     this.lookDX = 0;
     this.lookDY = 0;

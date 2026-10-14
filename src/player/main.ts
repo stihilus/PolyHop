@@ -2,12 +2,15 @@
 // (see vite.player.config.ts) so an export works from any folder, from itch.io, and even from file://.
 
 import * as THREE from 'three';
+import { GAMEPAD_HELP, GAMEPAD_NAMES_NOTE, PAD } from '../core/gamepad';
 import { ACTION_LABELS, keyLabel } from '../core/keys';
 import { resolveMenu } from '../core/menu';
 import { ACTIONS, type Action, normalizeProject } from '../core/types';
 import { createEnvironment } from '../runtime/environment';
 import { Game } from '../runtime/game';
+import { PadReader } from '../runtime/gamepad';
 import { menuBackdrop, menuContent } from '../runtime/menu';
+import { MenuNav } from '../runtime/menuNav';
 import {
   type Controls,
   type PlayerPrefs,
@@ -124,8 +127,10 @@ async function main(): Promise<void> {
     savePrefs(storage, storeKey, prefs);
   };
   let overlayPaused = false;
+  let settingsOpen = false;
   const settingsMenu = createSettingsMenu({
     touch: () => game.touchMode,
+    gamepad: () => project.settings.gamepad,
     values: () => {
       const s = project.settings;
       return {
@@ -163,9 +168,19 @@ async function main(): Promise<void> {
     back: () => showOverlay(overlayPaused),
   }, menu.settingsLabel);
   const showSettings = () => {
+    settingsOpen = true;
     overlay.replaceChildren(settingsMenu.element);
     settingsMenu.refresh();
   };
+
+  // ---- gamepad: moves through the menus, pauses and continues; the on-screen buttons get out of its way
+  const pad = new PadReader();
+  const nav = new MenuNav({
+    layers: () => [overlay.style.display !== 'none' ? overlay : null, game.endScreen],
+    blocked: () => settingsMenu.listening,
+  });
+  let padMode = false;
+  let controlsList: HTMLElement | null = null;
 
   // ---- phone controls: from the start on a touch device, or when the first touch shows up
   let touch: TouchControls | null = null;
@@ -173,13 +188,23 @@ async function main(): Promise<void> {
     if (touch) return;
     touch = new TouchControls(root, () => pause());
     game.setTouch(touch.state);
-    if (started && !game.paused) touch.show();
+    if (started && !game.paused && !padMode) touch.show();
   };
+  const setPadMode = (on: boolean) => {
+    if (padMode === on) return;
+    padMode = on;
+    if (on) touch?.hide();
+    else if (started && !game.paused && !game.ended) touch?.show();
+    if (controlsList) fillControls(controlsList);
+  };
+  // a finger on the screen: the on-screen buttons are back
+  window.addEventListener('touchstart', () => setPadMode(false), { capture: true, passive: true });
 
   let started = false;
   const toggleFullscreen = () => void (document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen?.());
   const showOverlay = (paused: boolean) => {
     overlayPaused = paused;
+    settingsOpen = false;
     touch?.hide();
     overlay.replaceChildren();
     overlay.style.display = 'flex';
@@ -193,18 +218,34 @@ async function main(): Promise<void> {
       onFullscreen: toggleFullscreen,
     });
     overlay.append(content);
+    controlsList = null;
     if (options.showControls) {
-      const table = div({ fontSize: '14px', color: '#cfd5e0', margin: '22px 0 0', lineHeight: '1.7' });
-      if (game.touchMode) {
-        table.append(div({}, 'Left side: move'), div({}, 'Right side: look around'), div({ color: '#9aa3b2' }, 'Buttons: Jump, Use, Run, Duck'));
-      } else {
-        for (const action of ACTIONS) {
-          const keys = project.settings.controls[action].map(keyLabel).join(' / ');
-          table.append(div({}, `${ACTION_LABELS[action]}: ${keys}`));
-        }
-        table.append(div({ color: '#9aa3b2' }, 'Mouse: turn / look · M: sound on / off'));
+      controlsList = div({ fontSize: '14px', color: '#cfd5e0', margin: '22px 0 0', lineHeight: '1.7' });
+      fillControls(controlsList);
+      content.append(controlsList);
+    }
+  };
+
+  /** The list of controls under the menu: the keys, the touch screen, or the gamepad - whichever is being used. */
+  const fillControls = (table: HTMLElement) => {
+    table.replaceChildren();
+    const note = (text: string) => div({ color: '#9aa3b2' }, text);
+    if (padMode && project.settings.gamepad) {
+      for (const h of GAMEPAD_HELP) table.append(div({}, `${h.action}: ${h.buttons}`));
+      table.append(note(GAMEPAD_NAMES_NOTE));
+      return;
+    }
+    if (game.touchMode) {
+      table.append(div({}, 'Left side: move'), div({}, 'Right side: look around'), note('Buttons: Jump, Use, Run, Duck'));
+    } else {
+      for (const action of ACTIONS) {
+        const keys = project.settings.controls[action].map(keyLabel).join(' / ');
+        table.append(div({}, `${ACTION_LABELS[action]}: ${keys}`));
       }
-      content.append(table);
+      table.append(note('Mouse: turn / look · M: sound on / off'));
+    }
+    if (project.settings.gamepad) {
+      table.append(note(pad.connected ? 'A gamepad is connected: press a button to use it.' : 'Gamepad: connect one and press a button.'));
     }
   };
 
@@ -225,9 +266,10 @@ async function main(): Promise<void> {
       game.startPlay();
       if (project.settings.fullscreen) void root!.requestFullscreen?.().catch(() => {});
     }
+    settingsOpen = false;
     game.setPaused(false);
     lockMouse();
-    touch?.show();
+    if (!padMode) touch?.show();
   }
 
   const pause = () => {
@@ -257,10 +299,25 @@ async function main(): Promise<void> {
 
   // ---- loop
   let last = performance.now();
+  let connected = false;
   const frame = (now: number) => {
     requestAnimationFrame(frame);
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
+    pad.poll(dt);
+    if (project.settings.gamepad) {
+      const wasConnected = connected;
+      connected = pad.connected;
+      if (pad.active) setPadMode(true);
+      else if (wasConnected !== connected && controlsList) fillControls(controlsList);
+      nav.update(pad);
+      // Options is what Esc is: pause, continue, or leave the settings
+      if (pad.pressed(PAD.options) && !game.ended && !settingsMenu.listening) {
+        if (settingsOpen) settingsMenu.element.querySelector<HTMLElement>('[data-nav-back]')?.click();
+        else if (overlay.style.display !== 'none') start();
+        else pause();
+      }
+    }
     game.update(dt);
     const c = game.controller.pos;
     environment.followSun(followPoint.set(c[0], c[1], c[2]));

@@ -542,7 +542,8 @@ export class EditorApp {
         ? `${k('forward')} ${k('back')} move · ${k('left')} ${k('right')} turn · mouse turns`
         : `${k('forward')} ${k('left')} ${k('back')} ${k('right')} move · mouse look`;
       const jump = this.store.project.player.doubleJump ? `${k('jump')} jump (twice in the air)` : `${k('jump')} jump`;
-      this.hudBottom.textContent = `${move} · ${k('run')} run · ${jump} · ${k('crouch')} crouch · Esc ${this.viewport.pointerLocked ? 'releases mouse' : 'stops'}`;
+      const pad = this.store.project.settings.gamepad ? ' · Gamepad: sticks move and look, ✕ jump, □ run, ○ crouch, △ use, Options stops' : '';
+      this.hudBottom.textContent = `${move} · ${k('run')} run · ${jump} · ${k('crouch')} crouch · Esc ${this.viewport.pointerLocked ? 'releases mouse' : 'stops'}${pad}`;
     } else {
       this.hudBottom.textContent = 'Orbit: middle mouse · Pan: Shift + middle · Zoom: wheel · Fly: hold right mouse + W A S D · ? all shortcuts';
       this.hudTop.textContent = '';

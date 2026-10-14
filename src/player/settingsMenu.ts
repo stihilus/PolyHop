@@ -1,6 +1,7 @@
 // The settings screen of the exported game: volume, mouse, resolution and the keys.
 // It only edits through the `SettingsHost` it is given; the game and the saving are the host's business.
 
+import { GAMEPAD_HELP, GAMEPAD_NAMES_NOTE } from '../core/gamepad';
 import { ACTION_LABELS, keyLabel } from '../core/keys';
 import { ACTIONS, type Action, RENDER_SCALES } from '../core/types';
 import { RESERVED_KEYS, SENSITIVITY_MAX, SENSITIVITY_MIN } from '../runtime/prefs';
@@ -18,6 +19,8 @@ export interface SettingsValues {
 export interface SettingsHost {
   /** Phone controls are in use: no keys to pick, and the "mouse" is a finger. */
   touch(): boolean;
+  /** The game listens to a gamepad (the project allows it): its buttons are listed. */
+  gamepad(): boolean;
   values(): SettingsValues;
   /** The player changed something. The host applies and saves it. */
   change(patch: Partial<Omit<SettingsValues, 'controls'>>): void;
@@ -74,6 +77,8 @@ function checkbox(checked: boolean, onChange: (v: boolean) => void): HTMLInputEl
 
 export interface SettingsMenu {
   element: HTMLElement;
+  /** A key is being picked: the arrow keys and the buttons of a pad must leave it alone. */
+  readonly listening: boolean;
   /** Draw the screen again (after the host changed the values on its own). */
   refresh(): void;
 }
@@ -134,10 +139,26 @@ export function createSettingsMenu(host: SettingsHost, title = 'Settings'): Sett
         panel.append(row(ACTION_LABELS[action], b));
       }
     }
+    // the buttons of a gamepad: what each does (a list to read, there is nothing to pick)
+    if (host.gamepad()) {
+      panel.append(div({ margin: '14px 0 4px', color: '#9aa3b2', fontSize: '13px', letterSpacing: '0.08em' }, 'GAMEPAD'));
+      for (const h of GAMEPAD_HELP) {
+        panel.append(
+          div(
+            { display: 'flex', justifyContent: 'space-between', gap: '16px', padding: '3px 0', fontSize: '14px' },
+            div({ color: '#cfd5e0' }, h.action),
+            div({ color: '#9aa3b2', textAlign: 'right' }, h.buttons),
+          ),
+        );
+      }
+      panel.append(div({ color: '#6f7889', fontSize: '12px', margin: '6px 0 0' }, GAMEPAD_NAMES_NOTE));
+    }
     panel.append(div({ minHeight: '20px', margin: '6px 0 0', color: getAccent(), fontSize: '13px', textAlign: 'center' }, note));
     note = '';
 
-    panel.append(div({ display: 'flex', justifyContent: 'center', marginTop: '6px' }, button('Back', host.back), button('Defaults', host.reset, true)));
+    const back = button('Back', host.back);
+    back.setAttribute('data-nav-back', '');
+    panel.append(div({ display: 'flex', justifyContent: 'center', marginTop: '6px' }, back, button('Defaults', host.reset, true)));
   };
 
   function listen(action: Action, label: HTMLButtonElement): void {
@@ -170,5 +191,11 @@ export function createSettingsMenu(host: SettingsHost, title = 'Settings'): Sett
   }
 
   render();
-  return { element: panel, refresh: render };
+  return {
+    element: panel,
+    get listening() {
+      return listening !== null;
+    },
+    refresh: render,
+  };
 }

@@ -70,6 +70,8 @@ interface Talk {
   index: number;
   /** A question: the answers and what each does. */
   options?: { label: string; actions: Action[] }[];
+  /** The answer that is marked (a button picks it). */
+  selected?: number;
   voice: TalkVoice;
   /** The line being shown and the sounds that go with it. */
   typer?: Typewriter;
@@ -458,6 +460,16 @@ export class Game {
     this.nextLine();
   }
 
+  /** The end screen, while there is one. */
+  get endScreen(): HTMLElement | null {
+    return this.hud?.endScreen ?? null;
+  }
+
+  /** The gamepad has been used a moment ago (the hints and prompts name its buttons). */
+  get padActive(): boolean {
+    return this.input.padActive;
+  }
+
   /** The words of the line are still appearing. */
   get isTyping(): boolean {
     const typer = this.talking?.typer;
@@ -494,9 +506,13 @@ export class Game {
     if (!this.hud) return;
     const last = t.index >= t.lines.length - 1;
     if (t.options) {
-      this.hud.showDialogue(t.speaker, line, '', t.options.map((o) => o.label), (i) => this.answer(i), () => this.advanceTalk(), t.typer.shown);
+      // up / down and Cross (or Enter) pick an answer too; the number keys and a click still do
+      const hint = this.input.padActive ? 'D-pad: choose · Cross: pick' : this.touchMode ? '' : '↑ ↓ choose · Enter or 1-4: pick';
+      t.selected = 0;
+      this.hud.showDialogue(t.speaker, line, hint, t.options.map((o) => o.label), (i) => this.answer(i), () => this.advanceTalk(), t.typer.shown);
     } else {
-      const hint = this.touchMode ? (last ? 'Tap: close' : 'Tap: next') : last ? 'Interact / Jump: close' : 'Interact / Jump: next';
+      const what = last ? 'close' : 'next';
+      const hint = this.input.padActive ? `Cross / Triangle: ${what}` : this.touchMode ? `Tap: ${what}` : `Interact / Jump: ${what}`;
       this.hud.showDialogue(t.speaker, line, hint, [], () => {}, () => this.advanceTalk(), t.typer.shown);
     }
   }
@@ -812,12 +828,21 @@ export class Game {
       this.level.animate(dt);
       this.talkTick(dt);
       if (this.talking.options) {
+        const t = this.talking;
         if (inp.answer >= 0) {
           // the first key press shows the whole question, the next one answers it
           if (this.isTyping) this.advanceTalk();
           else this.answer(inp.answer);
+        } else if (inp.navY !== 0 && !this.isTyping) {
+          // up and down move the mark over the answers (it wraps round)
+          const n = t.options!.length;
+          t.selected = (((t.selected ?? 0) + inp.navY) % n + n) % n;
+          this.hud?.selectAnswer(t.selected);
+        } else if (inp.confirm) {
+          if (this.isTyping) this.advanceTalk();
+          else this.answer(t.selected ?? 0);
         }
-      } else if (inp.interactPressed || inp.jumpPressed) {
+      } else if (inp.interactPressed || inp.jumpPressed || inp.confirm) {
         this.advanceTalk();
       }
       this.updateCamera(dt);
@@ -872,7 +897,15 @@ export class Game {
     if (this.hud && !this.ended) {
       const key = this.project.settings.controls.interact[0];
       const can = this.logic.canInteract(this.interactBox(), this.removed);
-      this.hud.setPrompt(can && (this.touchMode || key) ? (this.touchMode ? 'Use: interact' : `${keyLabel(key!)}: interact`) : null);
+      this.hud.setPrompt(
+        can && (this.touchMode || this.input.padActive || key)
+          ? this.input.padActive
+            ? 'Triangle: interact'
+            : this.touchMode
+              ? 'Use: interact'
+              : `${keyLabel(key!)}: interact`
+          : null,
+      );
     }
     this.hud?.update(this.logic.store);
     if (this.hud) {
