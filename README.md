@@ -126,6 +126,9 @@ placement in the level does not touch the component: it is always in the Assets.
 - **Edit the component** (**Edit the component** on any instance, or select its card in the Assets): its look, size, solid,
   animation and rules are there, and its shapes in the Models tab (**Open in Models**). Every instance follows at once.
   The shapes of an instance cannot be edited; it has its own place, turn, scale, size and tint.
+- **Animations of a component.** The first animation you make for a component in the Animate tab is what its instances play
+  (pick another under *Every instance does this > Animation*); renaming it is followed, deleting it drops it. A model with
+  Tile mapping can have bones too: an animated instance is drawn from its rig, and the tile moves with the shapes.
 - **Select its placements** (component properties) selects all instances in the level being edited.
 - **Detach** turns an instance into an ordinary object with shapes and behavior of its own. **Not a component** makes a model
   ordinary again (its placements keep what they have). **Edit in Models** (on a block in the level) turns it into an ordinary

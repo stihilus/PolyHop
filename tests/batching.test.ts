@@ -156,3 +156,50 @@ describe('what is near the player', () => {
     expect(collidersNear(c, 51, 1, 3).boxes).toHaveLength(1);
   });
 });
+
+describe('a tile-mapped model that is animated', () => {
+  it('is drawn from its rig and plays its clip, while a still one is drawn like a block', () => {
+    const wheel = createModel('Wheel', 'Textures-16.png');
+    wheel.mapping = 'tile';
+    wheel.look = { tile: { col: 3, row: 3 }, tint: '#ffffff', doubleSided: true };
+    const bone = { id: 'b1', name: 'Root', parent: null, pivot: [0, 0, 0] as [number, number, number] };
+    wheel.bones = [bone];
+    wheel.cubes[0]!.bone = 'b1';
+    wheel.clips = [
+      {
+        id: 'c1',
+        name: 'spin',
+        duration: 2,
+        loop: true,
+        tracks: {
+          Root: {
+            rot: [
+              { t: 0, v: [0, 0, 0] },
+              { t: 1, v: [0, 180, 0] },
+              { t: 2, v: [0, 360, 0] },
+            ],
+          },
+        },
+      },
+    ];
+    const level = setup([wheel]);
+    const still = createModelInstance(wheel, [0, 0, 0]);
+    const spinning = { ...createModelInstance(wheel, [4, 0, 0]), animation: 'spin' };
+    level.rebuild([still, spinning]);
+    const stillMesh = level.getMesh(still.id)!;
+    const spinMesh = level.getMesh(spinning.id)!;
+    // the still one is a block: its scale is in its points; the spinning one has a rig that animate() poses
+    expect(stillMesh.userData.bakedScale).toBeDefined();
+    expect(stillMesh.userData.rig).toBeUndefined();
+    expect(spinMesh.userData.rig).toBeDefined();
+    expect(spinMesh.userData.animation).toBe('spin');
+    const rig = spinMesh.userData.rig as { root: THREE.Group };
+    const before = rig.root.children[0]!.matrix.clone();
+    level.animate(0.5);
+    const after = rig.root.children[0]!.matrix;
+    expect(after.equals(before)).toBe(false);
+    // batched in a running game: the animated one stays out of the batches
+    level.rebuild([still, spinning], true);
+    expect(level.getMesh(spinning.id)).toBeDefined();
+  });
+});

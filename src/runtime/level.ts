@@ -123,6 +123,11 @@ function hashId(id: string): number {
   return h;
 }
 
+/** Does this instance play an animation of its model (it has bones and a clip of that name)? Then it is drawn from its rig. */
+export function playsAnimation(obj: LevelModelInstance, model: Model): boolean {
+  return !!obj.animation && model.bones.length > 0 && model.clips.some((c) => c.name === obj.animation);
+}
+
 /** Two '#rrggbb' colors multiplied channel by channel (an instance's tint on top of the look of its model). */
 export function multiplyColors(a: string, b: string | undefined): string {
   if (!b || b.toLowerCase() === '#ffffff') return a;
@@ -280,7 +285,7 @@ export class Level {
       let o: LevelObject = source;
       if (source.kind === 'model') {
         const render = this.models.get(source.modelId);
-        if (render && isTiled(render.model)) o = instanceAsBlock(source, render.model);
+        if (render && isTiled(render.model) && !playsAnimation(source, render.model)) o = instanceAsBlock(source, render.model);
       }
       if (o.kind === 'model') {
         const render = this.models.get(o.modelId);
@@ -401,8 +406,9 @@ export class Level {
     const render = obj.kind === 'model' ? this.models.get(obj.modelId) : null;
     if (obj.kind === 'block') {
       mesh = this.buildBlock(obj);
-    } else if (render && isTiled(render.model)) {
-      // a tile-mapped model is drawn like a block, with the scale of the instance in its points
+    } else if (render && isTiled(render.model) && !playsAnimation(obj, render.model)) {
+      // a tile-mapped model is drawn like a block, with the scale of the instance in its points. One that plays an
+      // animation is drawn from its rig instead (its bones move the shapes; the tile is not scaled with the instance)
       mesh = this.buildBlock(instanceAsBlock(obj, render.model));
       mesh.userData.bakedScale = obj.scale.join(',');
     } else {
@@ -487,7 +493,7 @@ export class Level {
       }
       // an animated instance: the still mesh stays as an invisible stand-in for picking, and the
       // posed rig is its child, so it moves, turns and scales with the instance
-      if (obj.animation && render.model.bones.length > 0 && render.model.clips.some((c) => c.name === obj.animation)) {
+      if (playsAnimation(obj, render.model)) {
         mesh.material = this.proxyMaterial;
         const rig = new RigRender(render, render.material);
         mesh.add(rig.root);

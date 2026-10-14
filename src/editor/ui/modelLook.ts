@@ -74,7 +74,6 @@ export function buildModelLookEditor(opts: ModelLookOptions): HTMLElement {
     el('option', { value: 'uv', text: 'UV: every face has its own part of the texture' }),
   );
   mapping.value = tiled ? 'tile' : 'uv';
-  mapping.disabled = rigged;
   mapping.addEventListener('change', () => {
     setMapping(model, mapping.value === 'tile' ? 'tile' : 'uv', tileSize);
     opts.onChange('mapping');
@@ -84,11 +83,11 @@ export function buildModelLookEditor(opts: ModelLookOptions): HTMLElement {
   root.append(
     el('div', {
       class: 'empty muted',
-      text: rigged
-        ? 'A model with bones uses UV: every part has its own picture.'
-        : tiled
-          ? 'The picture is repeated once per meter, and keeps its size when the object is made bigger: walls, floors, boxes. Use UV to paint every face on its own.'
-          : 'Every face shows its own part of the texture, as you set it in the UV panel. Use Tile for a surface that repeats.',
+      text: tiled
+        ? rigged
+          ? 'The picture is repeated once per meter and moves with the bones. An animated placement is drawn from its rig, so making it bigger stretches the picture.'
+          : 'The picture is repeated once per meter, and keeps its size when the object is made bigger: walls, floors, boxes. Use UV to paint every face on its own.'
+        : 'Every face shows its own part of the texture, as you set it in the UV panel. Use Tile for a surface that repeats.',
     }),
   );
 

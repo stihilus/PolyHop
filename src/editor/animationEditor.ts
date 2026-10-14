@@ -16,6 +16,7 @@ import {
   snapTime,
 } from '../core/clipEdit';
 import { type Pose, boneAnchor, createSkeleton, rotateInParent, sampleClip } from '../core/rig';
+import { modelDefaults } from '../core/components';
 import { type AnimationClip, type Bone, type Model, type Vec3, newId, normalizeClip } from '../core/types';
 import type { ModelLibrary, ModelRender } from '../runtime/modelRender';
 import { RigRender } from '../runtime/rigRender';
@@ -452,6 +453,32 @@ export class AnimationEditor {
     this.store.modelChanged(this.model.id, false);
   }
 
+  /**
+   * A component plays the animation it is given: the first animation made for it becomes what its instances play, one that
+   * is renamed is followed, one that is deleted is dropped. (An ordinary model keeps the choice of each placement.)
+   */
+  private keepComponentInStep(change: { added?: string; renamed?: { from: string; to: string }; removed?: string }): void {
+    const model = this.model;
+    if (!model) return;
+    const placed = this.store.project.levels.flatMap((l) => l.objects).filter((o) => o.kind === 'model' && o.modelId === model.id);
+    if (change.renamed) {
+      const { from, to } = change.renamed;
+      for (const o of placed) if (o.kind === 'model' && o.animation === from) o.animation = to;
+    }
+    if (!model.component) return;
+    const d = modelDefaults(model);
+    let animation = d.animation;
+    if (change.added && animation === null) animation = change.added;
+    if (change.renamed && animation === change.renamed.from) animation = change.renamed.to;
+    if (change.removed && animation === change.removed) animation = null;
+    if (animation !== d.animation) {
+      model.defaults = { ...d, rules: model.defaults?.rules ?? [], animation };
+      this.store.componentChanged(model.id, 'edit:animation');
+    } else if (change.renamed) {
+      this.store.componentChanged(model.id, 'edit:animation');
+    }
+  }
+
   private restore(snapshot: string): void {
     const model = this.model;
     if (!model) return;
@@ -511,6 +538,7 @@ export class AnimationEditor {
     this.clip = clip;
     this.time = 0;
     this.commit('new-clip');
+    this.keepComponentInStep({ added: clip.name });
     this.updateGizmoTarget();
     this.refreshAll();
   }
@@ -523,6 +551,7 @@ export class AnimationEditor {
     model.clips.push(copy);
     this.clip = copy;
     this.commit('duplicate-clip');
+    this.keepComponentInStep({ added: copy.name });
     this.updateGizmoTarget();
     this.refreshAll();
   }
@@ -537,6 +566,7 @@ export class AnimationEditor {
     this.clip = model.clips[0] ?? null;
     this.selectedKey = null;
     this.commit('delete-clip');
+    this.keepComponentInStep({ removed: clip.name });
     this.updateGizmoTarget();
     this.refreshAll();
   }
@@ -883,6 +913,7 @@ export class AnimationEditor {
     this.commit('create-skeleton');
     // the model's render and every instance of it are rebuilt with the bones
     this.store.modelChanged(model.id, true);
+    if (this.clip) this.keepComponentInStep({ added: this.clip.name });
     this.rebuildRig();
     this.refreshAll();
     this.updateGizmoTarget();
@@ -942,8 +973,10 @@ export class AnimationEditor {
         this.hint(`There is already an animation called “${name}”`);
         return;
       }
+      const from = clip.name;
       clip.name = name;
       this.commit('rename-clip');
+      this.keepComponentInStep({ renamed: { from, to: name } });
       this.refreshClipList();
       this.refreshInspector();
     });
@@ -1170,8 +1203,10 @@ export class AnimationEditor {
           name.value = clip.name;
           return;
         }
+        const from = clip.name;
         clip.name = n;
         this.commit('rename-clip');
+        this.keepComponentInStep({ renamed: { from, to: n } });
         this.refreshClipList();
       });
       const duration = el('input', { type: 'number', value: String(clip.duration), step: '0.1', min: '0.1' });
